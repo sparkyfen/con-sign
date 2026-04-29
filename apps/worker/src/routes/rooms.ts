@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import QRCode from 'qrcode';
 import {
   createRoomSchema,
   inviteResponseSchema,
@@ -91,7 +92,7 @@ roomRoutes.post('/', requireUser, async (c) => {
 
 roomRoutes.get('/:id/membership', requireUser, async (c) => {
   const roomId = c.req.param('id');
-  await requireRoommate(c, roomId);
+  const me = await requireRoommate(c, roomId);
   const result = await c.env.DB.prepare(
     `SELECT roommate.id AS roommateId, roommate.user_id AS userId, roommate.role AS role,
             user.display_name AS displayName, roommate.created_at AS joinedAt
@@ -101,7 +102,10 @@ roomRoutes.get('/:id/membership', requireUser, async (c) => {
   )
     .bind(roomId)
     .all<MemberSummary>();
-  const body: RoomMembership = { members: result.results ?? [] };
+  const members = result.results ?? [];
+  const adminCount = members.reduce((n, m) => n + (m.role === 'admin' ? 1 : 0), 0);
+  const isOnlyAdmin = me.role === 'admin' && adminCount === 1;
+  const body: RoomMembership = { members, isOnlyAdmin };
   return c.json(body);
 });
 
@@ -274,6 +278,36 @@ roomRoutes.post('/:id/roommates/:rid/passcode', requireUser, async (c) => {
     passcode,
   });
   return c.json(share);
+});
+
+// ─── GET /api/rooms/:id/qr.png ────────────────────────────────────────────
+// Admin-only. Returns a PNG QR encoding the public room URL
+// (https://<host>/r/<slug>) for the dashboard's "Preview QR" affordance.
+// `qrcode` only exposes a Node Buffer API; we go via the data-URL form and
+// base64-decode the payload so we can ship raw bytes from the Worker.
+
+roomRoutes.get('/:id/qr.png', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  await requireAdmin(c, roomId);
+  const room = await getRoom(c.env.DB, roomId);
+  if (!room) throw new HttpError(404, 'room_not_found');
+
+  const url = `${origin(c)}/r/${room.qr_slug}`;
+  const dataUrl = await QRCode.toDataURL(url, {
+    type: 'image/png',
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    scale: 8,
+  });
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  const bytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': 'image/png',
+      // Slug is stable; admin-only response so private cache is safe.
+      'Cache-Control': 'private, max-age=3600',
+    },
+  });
 });
 
 // ─── POST /api/rooms/:id/device-token ─────────────────────────────────────

@@ -33,7 +33,7 @@ crons = ["0 7 * * *"]  # 07:00 UTC daily
 # ─── Vars (non-secret config) ──────────────────────────────────────────────
 [vars]
 ICS_FEED_URL = "https://furrycons.com/calendar/furrycons.ics"
-TURNSTILE_SITE_KEY = ""  # set in dashboard or via env-specific override
+TURNSTILE_SITE_KEY = "0x4AAAAAADF5H74jQfg4RtQI"
 
 # ─── Secrets (DO NOT commit; set with `wrangler secret put`) ───────────────
 # Required:

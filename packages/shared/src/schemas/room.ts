@@ -82,5 +82,9 @@ export type MemberSummary = z.infer<typeof memberSummarySchema>;
 
 export const roomMembershipSchema = z.object({
   members: z.array(memberSummarySchema),
+  // True iff the requesting user is an admin AND no other admin exists in
+  // the room. Lets the UI pre-disable Leave/Remove instead of letting the
+  // last-admin guard fail at click time.
+  isOnlyAdmin: z.boolean(),
 });
 export type RoomMembership = z.infer<typeof roomMembershipSchema>;
