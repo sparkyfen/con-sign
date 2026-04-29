@@ -32,13 +32,13 @@ conRoutes.get('/', async (c) => {
   const stmt = params.q
     ? c.env.DB.prepare(
         `SELECT id, name, start_date, end_date, location, url FROM con
-          WHERE name LIKE ?1 AND end_date >= ?2
-          ORDER BY start_date ASC LIMIT ?3`,
+          WHERE name LIKE ? AND end_date >= ?
+          ORDER BY start_date ASC LIMIT ?`,
       ).bind(`%${params.q}%`, today, params.limit)
     : c.env.DB.prepare(
         `SELECT id, name, start_date, end_date, location, url FROM con
-          WHERE end_date >= ?1
-          ORDER BY start_date ASC LIMIT ?2`,
+          WHERE end_date >= ?
+          ORDER BY start_date ASC LIMIT ?`,
       ).bind(today, params.limit);
 
   const result = await stmt.all<ConRow>();

@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
-// Pure-logic unit tests run in plain Node (Web Crypto is built in for >=20).
-// Integration tests that need D1/KV/RL bindings will move to a separate
-// vitest project using @cloudflare/vitest-pool-workers when we get there.
+// Two tiers of tests:
+//   - *.test.ts             Pure unit tests, no bindings.
+//   - *.integration.test.ts Drive the Hono app via app.fetch() with an
+//                           in-memory D1/KV (better-sqlite3 + Map). No
+//                           miniflare/workerd boot — fast.
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
-    exclude: ['src/**/*.integration.test.ts'],
+    include: ['src/**/*.test.ts', 'test/**/*.integration.test.ts'],
   },
 });

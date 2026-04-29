@@ -11,7 +11,7 @@ import { roomRoutes } from './routes/rooms.js';
 import { visitorRoutes } from './routes/visitor.js';
 import { runIcsSync } from './cron/ics-sync.js';
 
-const app = new Hono<Env>();
+export const app = new Hono<Env>();
 
 app.onError((err, c) => {
   if (err instanceof ZodError) {
@@ -21,7 +21,13 @@ app.onError((err, c) => {
     return c.json({ error: err.code, message: err.message }, err.status);
   }
   console.error('unhandled error', err);
-  return c.json({ error: 'internal_error' }, 500);
+  return c.json(
+    {
+      error: 'internal_error',
+      message: err instanceof Error ? err.message : String(err),
+    },
+    500,
+  );
 });
 
 app.get('/api/health', (c) => c.json({ ok: true }));
