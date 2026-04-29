@@ -1,0 +1,52 @@
+name: Deploy worker → Cloudflare Workers
+
+# Deploys apps/worker/ to the Cloudflare Worker `con-sign`.
+# - main → production at the routes declared in apps/worker/wrangler.toml
+#          (currently cons.social/api/*).
+#
+# No PR previews: Workers don't have a Pages-style per-PR preview URL, and
+# `wrangler versions upload` doesn't produce a useful preview hostname here.
+# If you want PR-level smoke testing, run `pnpm --filter @con-sign/worker test`
+# in CI separately or add a versions-upload step later.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/worker/**'
+      - 'packages/shared/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version:` here — package.json's "packageManager" pin is the
+      # source of truth. Specifying both errors out.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy to Cloudflare Workers
+        # Uses the worker's pinned wrangler (apps/worker/package.json) and
+        # runs from apps/worker/ so it picks up apps/worker/wrangler.toml.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter @con-sign/worker run deploy
