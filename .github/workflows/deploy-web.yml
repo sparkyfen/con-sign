@@ -1,0 +1,78 @@
+name: Deploy web → Cloudflare Pages
+
+# Deploys apps/web/ to the Cloudflare Pages project `con-sign`.
+# - main      → production at https://con-sign.pages.dev (and cons.social
+#               once Pages is bound to the apex)
+# - PRs       → preview at https://<commit>.con-sign.pages.dev
+#
+# Toolchain note: apps/web/ is currently a placeholder. When the partner picks
+# a framework (Vite, Astro, Next, ...), update the BUILD_COMMAND env and
+# OUTPUT_DIR below — that's the only edit needed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'packages/shared/**'
+      - '.github/workflows/deploy-web.yml'
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'packages/shared/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+env:
+  # Edit when the toolchain lands.
+  BUILD_COMMAND: 'pnpm --filter @con-sign/web build'
+  OUTPUT_DIR: 'apps/web/dist'
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        # Skip the build until apps/web/ has a real toolchain. Once the
+        # partner adds a `build` script, remove this guard.
+        run: |
+          if pnpm --filter @con-sign/web run | grep -qE '^\s*build'; then
+            ${{ env.BUILD_COMMAND }}
+          else
+            echo "::warning::apps/web has no build script yet — deploying empty placeholder"
+            mkdir -p ${{ env.OUTPUT_DIR }}
+            echo "<!doctype html><title>con-sign</title><h1>con-sign</h1><p>Web app coming soon.</p>" > ${{ env.OUTPUT_DIR }}/index.html
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >
+            pages deploy ${{ env.OUTPUT_DIR }}
+            --project-name=con-sign
+            --branch=${{ github.head_ref || github.ref_name }}
+            --commit-hash=${{ github.sha }}
