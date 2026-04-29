@@ -3,10 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2024-10-04"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom Domain (apex). Pages will take over `/` later when apps/web ships,
-# at which point this becomes a route like `cons.social/api/*` instead.
+# Apex serves the Pages web app; this Worker only owns the API surface.
+# Bind `cons.social` as a custom domain on the Pages project (`con-sign`)
+# in the Cloudflare dashboard so requests to `/` reach Pages.
 routes = [
-  { pattern = "cons.social", custom_domain = true },
+  { pattern = "cons.social/api/*", zone_name = "cons.social" },
 ]
 
 # ─── D1 ────────────────────────────────────────────────────────────────────
