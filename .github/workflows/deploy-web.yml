@@ -67,12 +67,14 @@ jobs:
           fi
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: >
-            pages deploy ${{ env.OUTPUT_DIR }}
-            --project-name=con-sign
-            --branch=${{ github.head_ref || github.ref_name }}
-            --commit-hash=${{ github.sha }}
+        # wrangler is already a dep of @con-sign/worker; reuse it from there
+        # rather than letting cloudflare/wrangler-action try to add it to
+        # the workspace root (which pnpm rejects).
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm --filter @con-sign/worker exec wrangler pages deploy "$OUTPUT_DIR" \
+            --project-name=con-sign \
+            --branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}" \
+            --commit-hash="$GITHUB_SHA"
