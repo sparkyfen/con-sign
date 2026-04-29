@@ -1,0 +1,10 @@
+{
+  "name": "@con-sign/web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Pencil.dev frontend. Toolchain (Vite/Next/etc) to be set up by the web partner once mockups land. Will depend on @con-sign/shared for API types.",
+  "dependencies": {
+    "@con-sign/shared": "workspace:*"
+  }
+}

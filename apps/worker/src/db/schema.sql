@@ -1,0 +1,2 @@
+-- The migrations/ directory is the source of truth for schema state.
+-- Start with migrations/0001_init.sql.

@@ -1,0 +1,43 @@
+name = "con-sign"
+main = "src/index.ts"
+compatibility_date = "2024-10-04"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── D1 ────────────────────────────────────────────────────────────────────
+# Create with: wrangler d1 create con-sign-db
+# Then paste the database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "con-sign-db"
+database_id = "TODO_REPLACE_AFTER_d1_create"
+migrations_dir = "src/db/migrations"
+
+# ─── KV (sessions / session-revocation list) ───────────────────────────────
+# Create with: wrangler kv namespace create SESSIONS
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "TODO_REPLACE_AFTER_kv_create"
+
+# ─── Workers Rate Limiting (per-cookie unlock attempts) ────────────────────
+# 10 attempts per 60s window, keyed by visitor cookie id.
+[[unsafe.bindings]]
+name = "UNLOCK_RL"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# ─── Cron Trigger (daily ICS sync from furrycons.com) ──────────────────────
+[triggers]
+crons = ["0 7 * * *"]  # 07:00 UTC daily
+
+# ─── Vars (non-secret config) ──────────────────────────────────────────────
+[vars]
+ICS_FEED_URL = "https://furrycons.com/calendar/furrycons.ics"
+TURNSTILE_SITE_KEY = ""  # set in dashboard or via env-specific override
+
+# ─── Secrets (DO NOT commit; set with `wrangler secret put`) ───────────────
+# Required:
+#   wrangler secret put SESSION_HMAC          # 64-char random hex
+#   wrangler secret put BSKY_CLIENT_SECRET    # AT Protocol OAuth client secret
+#   wrangler secret put TG_BOT_TOKEN          # Telegram bot token (login + avatars)
+#   wrangler secret put TURNSTILE_SECRET      # Cloudflare Turnstile secret key
