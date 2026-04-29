@@ -64,3 +64,23 @@ export const deviceTokenIssuedSchema = z.object({
   token: z.string(),
 });
 export type DeviceTokenIssued = z.infer<typeof deviceTokenIssuedSchema>;
+
+/**
+ * Bare membership row used for admin management UI. Always returned for all
+ * roommates regardless of their per-field visibility — admins need to know
+ * who is in the room to manage them, but they see only identity, not fursona
+ * data.
+ */
+export const memberSummarySchema = z.object({
+  roommateId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: z.enum(['admin', 'member']),
+  displayName: z.string(),
+  joinedAt: z.string(),
+});
+export type MemberSummary = z.infer<typeof memberSummarySchema>;
+
+export const roomMembershipSchema = z.object({
+  members: z.array(memberSummarySchema),
+});
+export type RoomMembership = z.infer<typeof roomMembershipSchema>;

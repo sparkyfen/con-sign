@@ -61,10 +61,13 @@ export type UpdateRoommate = z.infer<typeof updateRoommateSchema>;
 /**
  * Returned exactly once when a passcode is generated or rotated. After this
  * response the plaintext is unrecoverable.
+ *
+ * `qrDataUrl` is a Cloudflare-Worker-friendly SVG data URL (no Buffer / no
+ * pngjs); the frontend can render it directly with <img src=...>.
  */
 export const passcodeIssuedSchema = z.object({
   passcode: z.string(),
   shareUrl: z.string().url(),
-  qrPngBase64: z.string(),
+  qrDataUrl: z.string(),
 });
 export type PasscodeIssued = z.infer<typeof passcodeIssuedSchema>;
