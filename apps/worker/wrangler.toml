@@ -3,20 +3,26 @@ main = "src/index.ts"
 compatibility_date = "2024-10-04"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom Domain (apex). Pages will take over `/` later when apps/web ships,
+# at which point this becomes a route like `cons.social/api/*` instead.
+routes = [
+  { pattern = "cons.social", custom_domain = true },
+]
+
 # ─── D1 ────────────────────────────────────────────────────────────────────
 # Create with: wrangler d1 create con-sign-db
 # Then paste the database_id below.
 [[d1_databases]]
 binding = "DB"
 database_name = "con-sign-db"
-database_id = "TODO_REPLACE_AFTER_d1_create"
+database_id = "828c5f75-6215-47e8-ad2f-e20532d69495"
 migrations_dir = "src/db/migrations"
 
 # ─── KV (sessions / session-revocation list) ───────────────────────────────
 # Create with: wrangler kv namespace create SESSIONS
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "TODO_REPLACE_AFTER_kv_create"
+id = "9b0d2db6fc144c1291f8d7ade58f68eb"
 
 # ─── Workers Rate Limiting (per-cookie unlock attempts) ────────────────────
 # 10 attempts per 60s window, keyed by visitor cookie id.
