@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to .mcp.json and edit the command path. The Pencil.dev binary is shipped inside their AppImage at /tmp/.mount_Pencil*/resources/app.asar.unpacked/out/mcp-server-linux-x64, but that path regenerates on every launch — extract it to a stable location once: 'AppImage --appimage-extract resources/app.asar.unpacked/out/mcp-server-linux-x64' then copy the binary to ~/.local/share/pencil/. Restart Claude Code after writing .mcp.json.",
+  "mcpServers": {
+    "pencil": {
+      "type": "stdio",
+      "command": "/CHANGE/ME/.local/share/pencil/mcp-server-linux-x64",
+      "args": ["--app", "desktop"],
+      "env": {}
+    }
+  }
+}

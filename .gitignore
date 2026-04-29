@@ -10,3 +10,7 @@ build/
 .DS_Store
 .vscode/
 .idea/
+
+# Per-developer MCP server paths (binary location varies per machine).
+# Copy from .mcp.json.example and edit the paths.
+.mcp.json
