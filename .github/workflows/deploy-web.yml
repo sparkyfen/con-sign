@@ -67,14 +67,14 @@ jobs:
           fi
 
       - name: Deploy to Cloudflare Pages
-        # wrangler is already a dep of @con-sign/worker; reuse it from there
-        # rather than letting cloudflare/wrangler-action try to add it to
-        # the workspace root (which pnpm rejects).
+        # Run wrangler via npx from the repo root so paths resolve relative
+        # to the workspace and it doesn't pick up apps/worker/wrangler.toml
+        # (which is the *Worker* config, not a Pages config).
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          pnpm --filter @con-sign/worker exec wrangler pages deploy "$OUTPUT_DIR" \
+          npx --yes wrangler@3 pages deploy "$OUTPUT_DIR" \
             --project-name=con-sign \
             --branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}" \
             --commit-hash="$GITHUB_SHA"
