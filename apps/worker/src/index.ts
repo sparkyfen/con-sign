@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import type { Bindings, Env } from './types.js';
 import { HttpError } from './errors.js';
 import { authRoutes } from './routes/auth.js';
+import { avatarRoutes } from './routes/avatar.js';
 import { conRoutes } from './routes/cons.js';
 import { deviceRoutes } from './routes/device.js';
 import { partyRoutes } from './routes/parties.js';
@@ -26,6 +27,7 @@ app.onError((err, c) => {
 app.get('/api/health', (c) => c.json({ ok: true }));
 
 app.route('/api/auth', authRoutes);
+app.route('/api/avatar', avatarRoutes);
 app.route('/api/cons', conRoutes);
 app.route('/api/r', visitorRoutes);
 app.route('/api/rooms', roomRoutes);

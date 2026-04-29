@@ -5,10 +5,8 @@
     "types": ["@cloudflare/workers-types", "node"],
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "composite": true
+    "noEmit": true,
+    "rootDir": "./src"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "references": [{ "path": "../../packages/shared" }]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
