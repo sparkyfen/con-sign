@@ -4,7 +4,7 @@ import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import { verifyPasscode } from '../auth/passcode.js';
 import { getVisibility, listRoommatesForRoom, roommateRowToApi } from '../db/queries.js';
-import { renderSignSvg } from '../render/sign.js';
+import { computeConDay, renderSignSvg } from '../render/sign.js';
 
 export const deviceRoutes = new Hono<Env>();
 
@@ -30,10 +30,20 @@ deviceRoutes.get('/sign.png', async (c) => {
   if (!roomId) throw new HttpError(400, 'missing_room');
 
   const room = await c.env.DB.prepare(
-    'SELECT id, name, qr_slug, device_token_hash FROM room WHERE id = ?',
+    `SELECT room.id AS id, room.name AS name, room.qr_slug AS qr_slug,
+            room.device_token_hash AS device_token_hash,
+            con.start_date AS con_start_date
+       FROM room JOIN con ON con.id = room.con_id
+      WHERE room.id = ?`,
   )
     .bind(roomId)
-    .first<{ id: string; name: string; qr_slug: string; device_token_hash: string | null }>();
+    .first<{
+      id: string;
+      name: string;
+      qr_slug: string;
+      device_token_hash: string | null;
+      con_start_date: string | null;
+    }>();
   if (!room || !room.device_token_hash) throw new HttpError(404, 'room_not_found');
 
   if (!(await verifyPasscode(token, room.device_token_hash))) {
@@ -54,7 +64,13 @@ deviceRoutes.get('/sign.png', async (c) => {
   const width = widthQ ? Math.max(100, Math.min(4096, Number(widthQ))) : 800;
   const height = heightQ ? Math.max(100, Math.min(4096, Number(heightQ))) : 480;
 
-  const svg = renderSignSvg({ roomName: room.name, roommates: projected, width, height });
+  const svg = renderSignSvg({
+    roomName: room.name,
+    roommates: projected,
+    width,
+    height,
+    conDay: computeConDay(room.con_start_date),
+  });
   return new Response(svg, {
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
