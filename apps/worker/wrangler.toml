@@ -3,10 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-10-04"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom Domain (apex). Pages will take over `/` later when apps/web ships,
-# at which point this becomes a route like `cons.social/api/*` instead.
+# Apex (`cons.social`) is owned by the Pages project (`con-sign`). The
+# Worker only handles the API surface via this route.
 routes = [
-  { pattern = "cons.social", custom_domain = true },
+  { pattern = "cons.social/api/*", zone_name = "cons.social" },
 ]
 
 # ─── D1 ────────────────────────────────────────────────────────────────────
