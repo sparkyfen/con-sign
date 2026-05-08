@@ -2,25 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { call, loginAs, newCtx, seedCon } from '../helpers.js';
 
 const ADMIN = '00000000-0000-0000-0000-000000000a01';
+const DEVICE_A = '11111111-1111-1111-1111-111111111111';
+const DEVICE_B = '22222222-2222-2222-2222-222222222222';
 
 interface RoomCreated {
   room: { id: string; qrSlug: string };
   me: { roommateId: string };
 }
 
-async function setupRoomWithSecret(): Promise<{
+async function setupRoom(): Promise<{
   ctx: ReturnType<typeof newCtx>;
   roomId: string;
   roommateId: string;
-  deviceToken: string;
 }> {
   const ctx = newCtx();
   const conId = await seedCon(ctx);
   await loginAs(ctx, ADMIN);
   const created = (await call(ctx, 'POST', '/api/rooms', { body: { conId, name: 'R' } }))
     .body as RoomCreated;
-
-  // Set a 'personal' field so the device view (guest tier) MUST exclude it.
   await call(ctx, 'PATCH', `/api/rooms/${created.room.id}/roommates/${created.me.roommateId}`, {
     body: { fursonaName: 'Pubname', bskyHandle: 'private.bsky.social' },
   });
@@ -30,46 +29,154 @@ async function setupRoomWithSecret(): Promise<{
     `/api/rooms/${created.room.id}/roommates/${created.me.roommateId}/visibility`,
     { body: { visibility: { fursona_name: 'guest', bsky_handle: 'personal' } } },
   );
-
-  const token = (
-    await call(ctx, 'POST', `/api/rooms/${created.room.id}/device-token`)
-  ).body as { token: string };
-  return {
-    ctx,
-    roomId: created.room.id,
-    roommateId: created.me.roommateId,
-    deviceToken: token.token,
-  };
+  return { ctx, roomId: created.room.id, roommateId: created.me.roommateId };
 }
 
-describe('integration: device endpoint', () => {
+describe('integration: device endpoint (pair-code flow)', () => {
   it('rejects requests without a bearer token', async () => {
     const ctx = newCtx();
-    const r = await call(ctx, 'GET', '/api/device/sign.png?room=any');
+    const r = await call(ctx, 'GET', '/api/device/sign.png');
     expect(r.status).toBe(401);
   });
 
-  it('serves the room render with a valid bearer token', async () => {
-    const { ctx, roomId, deviceToken } = await setupRoomWithSecret();
-    // Use a fresh ctx (no admin session) — device requests are bearer-only.
-    const dev = newCtx();
-    Object.assign(dev.env, ctx.env);
-    const r = await call(dev, 'GET', `/api/device/sign.png?room=${roomId}`, {
-      headers: { Authorization: `Bearer ${deviceToken}` },
+  it('serves an unpaired panel with a fresh pair code', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
     });
     expect(r.status).toBe(200);
     expect(r.res.headers.get('Content-Type')).toContain('svg');
-    expect(r.body).toContain('Pubname'); // guest-tier visible
-    expect(r.body).not.toContain('private.bsky.social'); // personal hidden
+    expect(r.body).toContain('PAIRING CODE');
+    // Code was stashed in KV under pair:dev:<deviceId>.
+    const code = await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`);
+    expect(code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
   });
 
-  it('rejects a wrong bearer token', async () => {
-    const { ctx, roomId } = await setupRoomWithSecret();
+  it('reuses the same code across polls within the TTL window', async () => {
+    const ctx = newCtx();
+    await call(ctx, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    const first = await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`);
+    await call(ctx, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    const second = await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`);
+    expect(first).toBe(second);
+  });
+
+  it('claims a device and the next poll returns the paired sign', async () => {
+    const { ctx, roomId } = await setupRoom();
+    // Use a fresh request context so we don't accidentally send the admin
+    // session cookie from the device side.
     const dev = newCtx();
     Object.assign(dev.env, ctx.env);
-    const r = await call(dev, 'GET', `/api/device/sign.png?room=${roomId}`, {
-      headers: { Authorization: 'Bearer not-the-right-token' },
+
+    await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
     });
-    expect(r.status).toBe(401);
+    const code = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+
+    const claim = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code },
+    });
+    expect(claim.status).toBe(200);
+    expect((claim.body as { deviceId: string }).deviceId).toBe(DEVICE_A);
+
+    // KV entries for the consumed code are gone.
+    expect(await ctx.env.SESSIONS.get(`pair:code:${code}`)).toBeNull();
+    expect(await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`)).toBeNull();
+
+    const r = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(r.status).toBe(200);
+    expect(r.body).toContain('Pubname'); // guest-tier visible
+    expect(r.body).not.toContain('private.bsky.social');
+  });
+
+  it('rejects an unknown or expired pair code', async () => {
+    const { ctx, roomId } = await setupRoom();
+    const r = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code: 'NOTACODE' },
+    });
+    expect(r.status).toBe(404);
+  });
+
+  it('rejects reuse of a consumed pair code', async () => {
+    const { ctx, roomId } = await setupRoom();
+    await call(ctx, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    const code = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    const ok = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code } });
+    expect(ok.status).toBe(200);
+    const dup = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code } });
+    expect(dup.status).toBe(404);
+  });
+
+  it('accepts the code when typed with spaces or lowercase', async () => {
+    const { ctx, roomId } = await setupRoom();
+    await call(ctx, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    const code = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    const formatted = code.split('').join(' ').toLowerCase();
+    const r = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code: formatted },
+    });
+    expect(r.status).toBe(200);
+  });
+
+  it('lists paired devices and revokes them', async () => {
+    const { ctx, roomId } = await setupRoom();
+    const dev = newCtx();
+    Object.assign(dev.env, ctx.env);
+
+    // Pair two devices.
+    for (const d of [DEVICE_A, DEVICE_B]) {
+      await call(dev, 'GET', '/api/device/sign.png', {
+        headers: { Authorization: `Bearer ${d}` },
+      });
+      const code = (await ctx.env.SESSIONS.get(`pair:dev:${d}`))!;
+      await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code } });
+    }
+
+    const list = await call(ctx, 'GET', `/api/rooms/${roomId}/devices`);
+    expect(list.status).toBe(200);
+    const devices = (list.body as { devices: { id: string }[] }).devices;
+    expect(devices.map((d) => d.id).sort()).toEqual([DEVICE_A, DEVICE_B].sort());
+
+    // Revoke one.
+    const rv = await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
+    expect(rv.status).toBe(200);
+
+    // It now renders the revoked panel.
+    const r = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(r.body).toContain('PANEL UNPAIRED');
+
+    // It is no longer listed.
+    const list2 = await call(ctx, 'GET', `/api/rooms/${roomId}/devices`);
+    const ids2 = (list2.body as { devices: { id: string }[] }).devices.map((d) => d.id);
+    expect(ids2).toEqual([DEVICE_B]);
+  });
+
+  it('refuses to revoke a device from a different room', async () => {
+    const { ctx, roomId } = await setupRoom();
+    // Pair DEVICE_A to roomId.
+    await call(ctx, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    const code = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code } });
+
+    // Create a second room owned by the same admin and try to revoke A from it.
+    const conId2 = await seedCon(ctx, { name: 'Other con' });
+    const room2 = (await call(ctx, 'POST', '/api/rooms', { body: { conId: conId2, name: 'R2' } }))
+      .body as RoomCreated;
+    const r = await call(ctx, 'DELETE', `/api/rooms/${room2.room.id}/devices/${DEVICE_A}`);
+    expect(r.status).toBe(404);
   });
 });

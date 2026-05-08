@@ -80,6 +80,84 @@ export function renderSignSvg(args: {
 </svg>`;
 }
 
+/**
+ * Centered "this panel is waiting to be paired" SVG. Matches the Pencil
+ * mockup `Screen / E-Ink — Unpaired` (frame RTuAt): CON·SIGN wordmark, an
+ * 80×4 ink rule, "PAIRING CODE" eyebrow, the code itself in a 3-stroke
+ * outlined box, an instruction line, and a "refreshes every 5 minutes"
+ * footer.
+ */
+export function renderUnpairedSvg(args: {
+  pairCode: string;
+  width: number;
+  height: number;
+}): string {
+  const { pairCode, width, height } = args;
+  const cx = width / 2;
+  const cy = height / 2;
+  // Render the code with em-spaces between glyphs to match the mockup.
+  const spaced = pairCode.split('').join('  ');
+  const codeFontSize = 56;
+  const boxPadX = 36;
+  const boxPadY = 22;
+  // Rough glyph-width estimate for the box stroke; doesn't need to be exact.
+  const codeBoxW = spaced.length * codeFontSize * 0.55;
+  const codeBoxH = codeFontSize + boxPadY * 2;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="100%" height="100%" fill="white"/>
+  <g font-family="ui-monospace, 'IBM Plex Mono', monospace" fill="black" text-anchor="middle">
+    <text x="${cx}" y="${cy - 150}" font-size="22" font-weight="700" letter-spacing="6">CON·SIGN</text>
+    <rect x="${cx - 40}" y="${cy - 130}" width="80" height="4" fill="black"/>
+    <text x="${cx}" y="${cy - 80}" font-size="18" font-weight="700" letter-spacing="4">PAIRING CODE</text>
+    <rect x="${cx - codeBoxW / 2}" y="${cy - codeBoxH / 2 + 10}" width="${codeBoxW}" height="${codeBoxH}"
+          fill="white" stroke="black" stroke-width="3"/>
+    <text x="${cx}" y="${cy + 30}" font-size="${codeFontSize}" font-weight="700" letter-spacing="8">${escape(spaced)}</text>
+  </g>
+  <g font-family="ui-serif, 'IBM Plex Serif', serif" fill="black" text-anchor="middle">
+    <text x="${cx}" y="${cy + 110}" font-size="20">Enter this code at cons.social/pair</text>
+    <text x="${cx}" y="${cy + 138}" font-size="20">to link this panel to your room.</text>
+  </g>
+  <text x="${cx}" y="${cy + 188}" font-size="14" font-style="italic" font-family="ui-monospace, monospace"
+        fill="#666" text-anchor="middle">Code refreshes every 5 minutes.</text>
+</svg>`;
+}
+
+/**
+ * "This panel was unpaired by a room admin" SVG. Matches the Pencil mockup
+ * `Screen / E-Ink — Token Revoked` (frame bsCQx). A simple triangle stands
+ * in for the lucide warning glyph; the panel doesn't have a glyph font
+ * available and we want zero external assets.
+ */
+export function renderRevokedSvg(args: { width: number; height: number }): string {
+  const { width, height } = args;
+  const cx = width / 2;
+  const cy = height / 2;
+
+  // Equilateral warning triangle.
+  const t = 36;
+  const triangle = `M ${cx} ${cy - 70 - t} L ${cx + t} ${cy - 70 + t * 0.6} L ${cx - t} ${cy - 70 + t * 0.6} Z`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="100%" height="100%" fill="white"/>
+  <g font-family="ui-monospace, 'IBM Plex Mono', monospace" fill="black" text-anchor="middle">
+    <text x="${cx}" y="${cy - 150}" font-size="22" font-weight="700" letter-spacing="6">CON·SIGN</text>
+    <rect x="${cx - 40}" y="${cy - 130}" width="80" height="4" fill="black"/>
+    <path d="${triangle}" fill="none" stroke="black" stroke-width="4" stroke-linejoin="round"/>
+    <text x="${cx}" y="${cy - 30}" font-size="14" font-weight="700">!</text>
+    <text x="${cx}" y="${cy + 8}" font-size="26" font-weight="700" letter-spacing="4">PANEL UNPAIRED</text>
+  </g>
+  <g font-family="ui-serif, 'IBM Plex Serif', serif" fill="black" text-anchor="middle">
+    <text x="${cx}" y="${cy + 56}" font-size="20">This panel's token has been revoked by a room admin.</text>
+    <text x="${cx}" y="${cy + 96}" font-size="16" font-style="italic" fill="#666">
+      To re-pair, visit cons.social/pair or contact your room admin.
+    </text>
+  </g>
+</svg>`;
+}
+
 function escape(s: string): string {
   return s
     .replaceAll('&', '&amp;')

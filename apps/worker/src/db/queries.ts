@@ -218,8 +218,74 @@ export interface RoomRow {
   con_id: string;
   name: string;
   qr_slug: string;
-  device_token_hash: string | null;
   created_at: string;
+}
+
+// ─── devices ───────────────────────────────────────────────────────────────
+
+export interface DeviceRow {
+  id: string;
+  room_id: string | null;
+  paired_at: string | null;
+  revoked_at: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+}
+
+export async function getDevice(db: D1Database, deviceId: string): Promise<DeviceRow | null> {
+  return db.prepare('SELECT * FROM device WHERE id = ?').bind(deviceId).first<DeviceRow>();
+}
+
+export async function touchDevice(db: D1Database, deviceId: string): Promise<void> {
+  await db
+    .prepare('UPDATE device SET last_seen_at = ? WHERE id = ?')
+    .bind(new Date().toISOString(), deviceId)
+    .run();
+}
+
+/**
+ * Atomically pair a device to a room. Inserts a new row if the device hasn't
+ * been seen yet (the unpaired-state lives in KV, not D1, so this is the
+ * first time the device gains a D1 row). If the device was previously
+ * revoked, clear `revoked_at`.
+ */
+export async function claimDevice(
+  db: D1Database,
+  args: { deviceId: string; roomId: string },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO device (id, room_id, paired_at, last_seen_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         room_id = excluded.room_id,
+         paired_at = excluded.paired_at,
+         revoked_at = NULL,
+         last_seen_at = excluded.last_seen_at`,
+    )
+    .bind(args.deviceId, args.roomId, now, now)
+    .run();
+}
+
+/** Revoke a device. Clears the room link so future polls render the
+ * "panel unpaired" notice instead of a stale paired view. */
+export async function revokeDevice(db: D1Database, deviceId: string): Promise<void> {
+  await db
+    .prepare('UPDATE device SET room_id = NULL, revoked_at = ? WHERE id = ?')
+    .bind(new Date().toISOString(), deviceId)
+    .run();
+}
+
+export async function listDevicesForRoom(
+  db: D1Database,
+  roomId: string,
+): Promise<DeviceRow[]> {
+  const result = await db
+    .prepare('SELECT * FROM device WHERE room_id = ? ORDER BY paired_at DESC')
+    .bind(roomId)
+    .all<DeviceRow>();
+  return result.results ?? [];
 }
 
 export async function createRoomWithAdmin(
@@ -352,10 +418,3 @@ export async function rotateRoommatePasscode(
     .run();
 }
 
-export async function setRoomDeviceTokenHash(
-  db: D1Database,
-  roomId: string,
-  hash: string,
-): Promise<void> {
-  await db.prepare('UPDATE room SET device_token_hash = ? WHERE id = ?').bind(hash, roomId).run();
-}

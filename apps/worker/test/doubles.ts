@@ -69,8 +69,9 @@ export function createD1(): D1Database {
   const sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
   const migrationsDir = join(process.cwd(), 'src/db/migrations');
-  const initSql = readFileSync(join(migrationsDir, '0001_init.sql'), 'utf8');
-  sqlite.exec(initSql);
+  for (const file of ['0001_init.sql', '0002_devices.sql']) {
+    sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
+  }
   // SQLite reserves `user` and `con` — check our migration uses them as
   // identifiers (it does; they're not reserved in SQLite proper, just MySQL).
   return new D1Stub(sqlite) as unknown as D1Database;
@@ -135,7 +136,7 @@ export interface TestBindings {
   ICS_FEED_URL: string;
   TURNSTILE_SITE_KEY: string;
   SESSION_HMAC: string;
-  BSKY_CLIENT_SECRET: string;
+  BSKY_PRIVATE_JWK: string;
   TG_BOT_TOKEN: string;
   TURNSTILE_SECRET: string;
 }
@@ -148,7 +149,7 @@ export function createTestBindings(overrides: Partial<TestBindings> = {}): TestB
     ICS_FEED_URL: 'https://example.invalid/test.ics',
     TURNSTILE_SITE_KEY: 'test-site-key',
     SESSION_HMAC: 'test-hmac-secret-do-not-use-in-prod',
-    BSKY_CLIENT_SECRET: 'test',
+    BSKY_PRIVATE_JWK: '{}',
     TG_BOT_TOKEN: 'test-bot-token',
     TURNSTILE_SECRET: 'test-turnstile-secret',
     ...overrides,

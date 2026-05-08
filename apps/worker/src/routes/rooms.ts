@@ -1,9 +1,12 @@
 import { Hono, type Context } from 'hono';
 import QRCode from 'qrcode';
 import {
+  claimDeviceSchema,
   createRoomSchema,
+  deviceListSchema,
   inviteResponseSchema,
-  type DeviceTokenIssued,
+  type DeviceList,
+  type DeviceSummary,
   type InviteResponse,
   type MemberSummary,
   type RoomMembership,
@@ -19,18 +22,21 @@ import { buildShareArtifacts } from '../auth/share.js';
 import { InviteError, consumeInviteToken, createInviteToken } from '../auth/invites.js';
 import {
   addRoommate,
+  claimDevice,
   createRoomWithAdmin,
   deleteRoommate,
   getRoom,
   getRoommate,
   getRoommateForUser,
   getVisibility,
+  listDevicesForRoom,
+  revokeDevice,
   rotateRoommatePasscode,
-  setRoomDeviceTokenHash,
   setVisibility,
   updateRoomName,
   updateRoommateProfile,
 } from '../db/queries.js';
+import { consumePairCode } from '../auth/pair-code.js';
 
 export const roomRoutes = new Hono<Env>();
 
@@ -310,22 +316,51 @@ roomRoutes.get('/:id/qr.png', requireUser, async (c) => {
   });
 });
 
-// ─── POST /api/rooms/:id/device-token ─────────────────────────────────────
-// Admin only. Issues (or rotates) the device bearer token. Plaintext shown
-// once. Task #15.
+// ─── Device pairing ───────────────────────────────────────────────────────
+//
+// Replaces the v0 `device-token` flow. The unpaired panel displays a
+// rotating 6-char OTP code; an admin enters that code into the dashboard,
+// the server reverse-resolves it to the device's persistent UUID, and
+// inserts a `device` row binding the device to this room.
 
-roomRoutes.post('/:id/device-token', requireUser, async (c) => {
+roomRoutes.post('/:id/devices/claim', requireUser, async (c) => {
   const roomId = c.req.param('id');
   await requireAdmin(c, roomId);
-  // 32 random bytes → 43-char base64url. Argon2-quality entropy not needed
-  // since this is a long random secret, not a user-typed passcode.
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  const token = btoa(String.fromCharCode(...bytes))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replaceAll('=', '');
-  const hash = await hashPasscode(token);
-  await setRoomDeviceTokenHash(c.env.DB, roomId, hash);
-  const body: DeviceTokenIssued = { token };
+  const room = await getRoom(c.env.DB, roomId);
+  if (!room) throw new HttpError(404, 'room_not_found');
+
+  const body = claimDeviceSchema.parse(await c.req.json());
+  const deviceId = await consumePairCode(c.env.SESSIONS, body.code);
+  if (!deviceId) throw new HttpError(404, 'pair_code_unknown_or_expired');
+
+  await claimDevice(c.env.DB, { deviceId, roomId });
+  return c.json({ deviceId });
+});
+
+roomRoutes.get('/:id/devices', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  await requireRoommate(c, roomId);
+  const rows = await listDevicesForRoom(c.env.DB, roomId);
+  const devices: DeviceSummary[] = rows.map((d) => ({
+    id: d.id,
+    pairedAt: d.paired_at,
+    lastSeenAt: d.last_seen_at,
+  }));
+  const body: DeviceList = deviceListSchema.parse({ devices });
   return c.json(body);
+});
+
+roomRoutes.delete('/:id/devices/:deviceId', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  const deviceId = c.req.param('deviceId');
+  await requireAdmin(c, roomId);
+
+  // Sanity check: only let the room's admins revoke devices that belong to
+  // this room (don't leak across tenants).
+  const devices = await listDevicesForRoom(c.env.DB, roomId);
+  if (!devices.some((d) => d.id === deviceId)) {
+    throw new HttpError(404, 'device_not_found');
+  }
+  await revokeDevice(c.env.DB, deviceId);
+  return c.json({ ok: true });
 });

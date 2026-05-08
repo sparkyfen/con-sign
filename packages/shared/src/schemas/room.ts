@@ -60,10 +60,26 @@ export const inviteResponseSchema = z.object({
 });
 export type InviteResponse = z.infer<typeof inviteResponseSchema>;
 
-export const deviceTokenIssuedSchema = z.object({
-  token: z.string(),
+// ─── devices ──────────────────────────────────────────────────────────────
+
+/** Admin-entered code from the unpaired panel. Accepts spaces / lowercase;
+ *  the server normalizes. Six alphanumeric chars, ambiguity-safe alphabet. */
+export const claimDeviceSchema = z.object({
+  code: z.string().min(6).max(20),
 });
-export type DeviceTokenIssued = z.infer<typeof deviceTokenIssuedSchema>;
+export type ClaimDevice = z.infer<typeof claimDeviceSchema>;
+
+export const deviceSummarySchema = z.object({
+  id: z.string(),
+  pairedAt: z.string().nullable(),
+  lastSeenAt: z.string().nullable(),
+});
+export type DeviceSummary = z.infer<typeof deviceSummarySchema>;
+
+export const deviceListSchema = z.object({
+  devices: z.array(deviceSummarySchema),
+});
+export type DeviceList = z.infer<typeof deviceListSchema>;
 
 /**
  * Bare membership row used for admin management UI. Always returned for all

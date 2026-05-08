@@ -84,7 +84,14 @@ code is "fetch PNG, push to panel."
 -- 'con' is sourced from the furrycons.com ICS feed (cron-synced); users pick.
 con            (id, ics_uid, name, start_date, end_date,
                 location, url, source_updated_at, created_at)
-room           (id, con_id, name, qr_slug, device_token_hash, created_at)
+room           (id, con_id, name, qr_slug, created_at)
+
+-- Device pairing: each panel is a first-class row keyed by the persistent
+-- UUID the firmware generates on first boot. Unpaired state lives in KV
+-- (rotating 6-char OTP code, 5-min TTL); D1 only sees a device once an
+-- admin claims its code.
+device         (id /* device UUID */, room_id /* nullable */,
+                paired_at, revoked_at, last_seen_at, created_at)
 
 -- Identity. A user can log in with BSky OR Telegram (or both, linked).
 user           (id, display_name, created_at)
@@ -121,9 +128,10 @@ Notes:
   the roommate themselves or by admins; rotation invalidates old share links.
 - **No room-level passcode.** Scanning the QR (`/r/{slug}`) puts you in guest
   tier automatically. The slug is the proof-of-presence.
-- **`device_token_hash`**: hash of the bearer token. Token shown once at
-  generation, never recoverable. Multiple tokens per room → upgrade to a
-  separate `device` table only if needed.
+- **`device`** rows are inserted only when an admin claims a panel's pair
+  code. Unpaired state is *transient* and lives entirely in KV — no D1 row
+  exists for a panel that's never been claimed. Multiple devices per room
+  are first-class.
 - **`field_visibility`** keyed by string field name (not a column-per-field
   table) so adding fields later is just app code, not a migration.
 - **`con`** rows are upserted by `ics_uid` from the daily ICS sync. We never
@@ -168,10 +176,26 @@ Notes:
     attempts on a slug. Does not block; just adds friction.
   - No IP-based blocking. Hotel NAT means IP ≠ user.
 
-### Device
+### Device pair-code bootstrap
 
-- Header: `Authorization: Bearer <token>`. Token tied to a single room.
-- Endpoint returns `image/png` (or `image/bmp` if the panel needs it).
+- Each panel generates a stable UUID (`device_id`) on first boot and persists
+  it in flash. That UUID is the bearer token forever — there is no separate
+  device-token registration step.
+- Panel polls `GET /api/device/sign.png` with `Authorization: Bearer <device_id>`.
+  Server dispatches on the matching `device` row:
+  - **No row** → render unpaired panel showing a rotating 6-char OTP code.
+    The code is random (not derived) and lives in KV under `pair:code:<CODE>`
+    (→ device_id) and `pair:dev:<device_id>` (→ code), 5-min TTL on both.
+  - **Row with `room_id`** → render the room sign (existing guest-tier
+    projection — the device sees what a passer-by sees).
+  - **Row with `revoked_at`** → render "panel unpaired" notice.
+- Admin pairs by typing the 6-char code at `cons.social/pair`, which POSTs
+  to `/api/rooms/:id/devices/claim`. Server reverse-resolves the code to
+  `device_id` (atomic via `kv.delete`), inserts the `device` row, panel sees
+  paired sign on next poll.
+- Revoke: admin DELETE on `/api/rooms/:id/devices/:device_id` sets
+  `revoked_at`. Re-pair: clears `revoked_at` on the same row, panel goes
+  back through the unpaired flow on next poll.
 
 ---
 
@@ -203,10 +227,12 @@ PATCH  /api/roommates/:id             (own profile, status, fursona)
 PUT    /api/roommates/:id/visibility  (per-field min_tier)
 POST   /api/roommates/:id/passcode    → { passcode, share_url } (shown once,
                                         rotates the existing one)
-POST   /api/rooms/:id/device-token    → { token } (shown once)
+POST   /api/rooms/:id/devices/claim   → { device_id } (admin enters 6-char OTP)
+GET    /api/rooms/:id/devices         → { devices[] } (paired list)
+DELETE /api/rooms/:id/devices/:dev_id → revokes (sets revoked_at)
 
 # Device
-GET    /api/device/sign.png           (bearer)
+GET    /api/device/sign.png           (bearer = device_id)
 
 # Stretch
 POST   /api/rooms/:id/parties
