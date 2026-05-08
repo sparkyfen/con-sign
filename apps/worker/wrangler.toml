@@ -44,6 +44,6 @@ TURNSTILE_SITE_KEY = "0x4AAAAAADF5H74jQfg4RtQI"
 # ─── Secrets (DO NOT commit; set with `wrangler secret put`) ───────────────
 # Required:
 #   wrangler secret put SESSION_HMAC          # 64-char random hex
-#   wrangler secret put BSKY_CLIENT_SECRET    # AT Protocol OAuth client secret
+#   wrangler secret put BSKY_PRIVATE_JWK      # ES256 private JWK (mint with `pnpm run keygen:bsky`)
 #   wrangler secret put TG_BOT_TOKEN          # Telegram bot token (login + avatars)
 #   wrangler secret put TURNSTILE_SECRET      # Cloudflare Turnstile secret key

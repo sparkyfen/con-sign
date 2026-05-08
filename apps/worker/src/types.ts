@@ -12,7 +12,8 @@ export interface Bindings {
 
   // secrets
   SESSION_HMAC: string;
-  BSKY_CLIENT_SECRET: string;
+  /** JSON-encoded private JWK (ES256) used for private_key_jwt + DPoP signing. */
+  BSKY_PRIVATE_JWK: string;
   TG_BOT_TOKEN: string;
   TURNSTILE_SECRET: string;
 }

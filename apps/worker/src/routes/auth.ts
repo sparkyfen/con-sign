@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import { requireUser } from '../auth/middleware.js';
+import { createBskyClient } from '../auth/bsky/client.js';
 import {
   SESSION_COOKIE,
   buildCookie,
@@ -12,18 +13,75 @@ import {
   signSession,
   verifySession,
 } from '../auth/session.js';
-import { TelegramAuthError, fetchTelegramAvatar, verifyTelegramLogin } from '../auth/telegram.js';
+import { TelegramAuthError, verifyTelegramLogin } from '../auth/telegram.js';
 import { upsertIdentity } from '../db/queries.js';
 
 export const authRoutes = new Hono<Env>();
 
-authRoutes.get('/bsky/start', () => {
-  throw new HttpError(404, 'not_implemented', 'BlueSky OAuth start — task #8');
+// ─── BlueSky OAuth ─────────────────────────────────────────────────────────
+
+authRoutes.get('/bsky/client-metadata.json', async (c) => {
+  const client = await createBskyClient(c.env);
+  return c.json(client.clientMetadata);
 });
 
-authRoutes.get('/bsky/callback', () => {
-  throw new HttpError(404, 'not_implemented', 'BlueSky OAuth callback — task #8');
+authRoutes.get('/bsky/jwks.json', async (c) => {
+  const client = await createBskyClient(c.env);
+  return c.json(client.jwks);
 });
+
+authRoutes.get('/bsky/start', async (c) => {
+  const handle = c.req.query('handle');
+  if (!handle) throw new HttpError(400, 'invalid_request', 'handle query param required');
+
+  const client = await createBskyClient(c.env);
+  const url = await client.authorize(handle, {
+    scope: 'atproto transition:generic',
+  });
+  return c.redirect(url.toString(), 302);
+});
+
+authRoutes.get('/bsky/callback', async (c) => {
+  const client = await createBskyClient(c.env);
+  const url = new URL(c.req.url);
+  const { session: oauthSession } = await client.callback(url.searchParams);
+
+  const did = oauthSession.did;
+  // Public AppView returns handle + avatar without needing the user's DPoP-
+  // bound access token. Cheaper and keeps DPoP confined to the OAuth flow.
+  const profileRes = await fetch(
+    `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`,
+  );
+  const profile = profileRes.ok
+    ? ((await profileRes.json()) as {
+        handle?: string;
+        displayName?: string;
+        avatar?: string;
+      })
+    : {};
+
+  const userId = await upsertIdentity(c.env.DB, {
+    provider: 'bsky',
+    providerId: did,
+    handle: profile.handle ?? null,
+    avatarUrl: profile.avatar ?? null,
+    displayName: profile.displayName || profile.handle || `bsky-${did.slice(-8)}`,
+    rawProfile: profile,
+  });
+
+  const session = newUserSession(userId);
+  const token = await signSession(session, c.env.SESSION_HMAC);
+  c.header(
+    'Set-Cookie',
+    buildCookie(SESSION_COOKIE, token, {
+      secure: url.protocol === 'https:',
+      maxAgeSec: session.exp - session.iat,
+    }),
+  );
+  return c.redirect('/', 302);
+});
+
+// ─── Telegram ──────────────────────────────────────────────────────────────
 
 authRoutes.post('/telegram/callback', async (c) => {
   const body = (await c.req.json()) as unknown;
