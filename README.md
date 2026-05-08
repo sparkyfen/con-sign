@@ -87,7 +87,9 @@ Per-package scripts:
 
 ## Status
 
-Backend is end-to-end working: auth (Telegram + per-roommate passcodes),
-room/roommate CRUD, visitor unlock + cookie projection, device endpoint,
-daily ICS sync. BlueSky OAuth and PNG (vs. SVG) device render are deferred —
-see `PLAN.md` and `git log` for current state.
+Backend is end-to-end working: BlueSky + Telegram login, per-roommate
+passcodes, room/roommate CRUD, visitor unlock + cookie projection, device
+endpoint, daily ICS sync. Deferred: PNG (vs. SVG) device render — only
+matters once e-ink hardware is picked. Next vertical slice: pair-code
+device bootstrap (mockups exist, no backend yet). See `PLAN.md` and
+`git log` for the latest.
