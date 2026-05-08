@@ -28,7 +28,9 @@ choice, data model, auth, privacy tiers, and a v1/stretch breakdown.
   (Identity-bound ACLs via login are a future option.)
 - **Location field:** predefined options + custom override, modeled as a typed
   status object so future panel/GPS data slots in without migration.
-- **E-ink device auth:** per-device API token (bearer header).
+- **E-ink device auth:** firmware-generated UUID is the bearer; admin
+  bootstraps via a 6-char OTP shown on the panel (see "Device pair-code
+  bootstrap" below).
 - **E-ink hardware:** undecided (Seeed Studio board seen at dma.space). Plan
   treats the device as a dumb HTTP client that fetches a server-rendered PNG —
   works for ESP32, Pi, Inkplate, or a tablet kiosk.
