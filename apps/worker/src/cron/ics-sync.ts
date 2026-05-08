@@ -7,7 +7,9 @@ import { parseIcs, type IcsEvent } from './ics-parse.js';
  */
 export async function runIcsSync(env: Bindings): Promise<{ ingested: number }> {
   const res = await fetch(env.ICS_FEED_URL, {
-    headers: { 'User-Agent': 'con-sign/0.1 (+https://github.com/sparkyfen/con-sign)' },
+    // furrycons.com is fronted by Cloudflare bot management and 403s any UA
+    // that includes a github.com URL. Identify with our public site instead.
+    headers: { 'User-Agent': 'con-sign/0.1 (+https://cons.social)' },
   });
   if (!res.ok) {
     console.error(`ics-sync: fetch ${res.status}`);
