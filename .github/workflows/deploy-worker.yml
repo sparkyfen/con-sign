@@ -43,6 +43,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply D1 migrations (remote)
+        # Idempotent: wrangler tracks applied migrations in a metadata
+        # table and skips ones already on the remote DB. Run before deploy
+        # so the new code never sees an out-of-date schema.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter @con-sign/worker run db:migrate:remote
+
       - name: Deploy to Cloudflare Workers
         # Uses the worker's pinned wrangler (apps/worker/package.json) and
         # runs from apps/worker/ so it picks up apps/worker/wrangler.toml.
