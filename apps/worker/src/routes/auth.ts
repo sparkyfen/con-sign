@@ -14,7 +14,8 @@ import {
   verifySession,
 } from '../auth/session.js';
 import { TelegramAuthError, verifyTelegramLogin } from '../auth/telegram.js';
-import { upsertIdentity } from '../db/queries.js';
+import { getUserDisplayName, listIdentitiesForUser, upsertIdentity } from '../db/queries.js';
+import type { SessionUser } from '@con-sign/shared';
 
 export const authRoutes = new Hono<Env>();
 
@@ -121,10 +122,22 @@ authRoutes.post('/telegram/callback', async (c) => {
 });
 
 
-authRoutes.get('/me', requireUser, (c) => {
-  // The full /me payload (with identities) lands in task #8/#9 alongside the
-  // user-creation flow. For now: just confirm a valid session.
-  return c.json({ userId: c.get('userId') });
+authRoutes.get('/me', requireUser, async (c) => {
+  const userId = c.get('userId')!;
+  const [displayName, identities] = await Promise.all([
+    getUserDisplayName(c.env.DB, userId),
+    listIdentitiesForUser(c.env.DB, userId),
+  ]);
+  const body: SessionUser = {
+    userId,
+    displayName: displayName ?? '',
+    identities: identities.map((i) => ({
+      provider: i.provider,
+      handle: i.handle,
+      avatarUrl: i.avatar_url,
+    })),
+  };
+  return c.json(body);
 });
 
 authRoutes.post('/logout', async (c) => {

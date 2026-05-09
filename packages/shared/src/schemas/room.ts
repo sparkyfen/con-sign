@@ -54,6 +54,39 @@ export const visitorRoomViewSchema = z.object({
 });
 export type VisitorRoomView = z.infer<typeof visitorRoomViewSchema>;
 
+/** A row in the dashboard's room list. Joins con + caller's role. */
+export const roomListItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  qrSlug: z.string(),
+  role: z.enum(['admin', 'member']),
+  conId: z.string().uuid(),
+  conName: z.string(),
+  conStartDate: z.string().nullable(),
+  conEndDate: z.string().nullable(),
+});
+export type RoomListItem = z.infer<typeof roomListItemSchema>;
+
+export const roomListSchema = z.object({
+  rooms: z.array(roomListItemSchema),
+});
+export type RoomList = z.infer<typeof roomListSchema>;
+
+/** Single room detail — header data for any in-room dashboard view. */
+export const roomDetailSchema = z.object({
+  room: roomSchema,
+  con: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    startDate: z.string().nullable(),
+    endDate: z.string().nullable(),
+    location: z.string().nullable(),
+    url: z.string().url().nullable(),
+  }),
+  myRole: z.enum(['admin', 'member']),
+});
+export type RoomDetail = z.infer<typeof roomDetailSchema>;
+
 export const inviteResponseSchema = z.object({
   inviteUrl: z.string().url(),
   expiresAt: z.string(),

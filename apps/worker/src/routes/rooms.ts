@@ -9,6 +9,11 @@ import {
   type DeviceSummary,
   type InviteResponse,
   type MemberSummary,
+  type Roommate,
+  type RoomDetail,
+  type RoomList,
+  type RoomListItem,
+  roomListSchema,
   type RoomMembership,
   updateFieldVisibilitySchema,
   updateRoomSchema,
@@ -26,12 +31,16 @@ import {
   createRoomWithAdmin,
   deleteRoommate,
   getRoom,
+  getRoomDetail,
   getRoommate,
   getRoommateForUser,
   getVisibility,
   listDevicesForRoom,
+  listRoomsForUser,
+  listRoommatesForRoom,
   revokeDevice,
   rotateRoommatePasscode,
+  roommateRowToApi,
   setVisibility,
   updateRoomName,
   updateRoommateProfile,
@@ -112,6 +121,81 @@ roomRoutes.get('/:id/membership', requireUser, async (c) => {
   const adminCount = members.reduce((n, m) => n + (m.role === 'admin' ? 1 : 0), 0);
   const isOnlyAdmin = me.role === 'admin' && adminCount === 1;
   const body: RoomMembership = { members, isOnlyAdmin };
+  return c.json(body);
+});
+
+// ─── GET /api/rooms ───────────────────────────────────────────────────────
+// Every room the caller is a member of. Powers the dashboard sidebar.
+
+roomRoutes.get('/', requireUser, async (c) => {
+  const userId = c.get('userId')!;
+  const rows = await listRoomsForUser(c.env.DB, userId);
+  const rooms: RoomListItem[] = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    qrSlug: r.qr_slug,
+    role: r.role,
+    conId: r.con_id,
+    conName: r.con_name,
+    conStartDate: r.con_start_date,
+    conEndDate: r.con_end_date,
+  }));
+  const body: RoomList = roomListSchema.parse({ rooms });
+  return c.json(body);
+});
+
+// ─── GET /api/rooms/:id ───────────────────────────────────────────────────
+// Header data for any in-room dashboard view. Member-only.
+
+roomRoutes.get('/:id', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  const me = await requireRoommate(c, roomId);
+  const row = await getRoomDetail(c.env.DB, roomId);
+  if (!row) throw new HttpError(404, 'room_not_found');
+  const body: RoomDetail = {
+    room: {
+      id: row.id,
+      conId: row.con_id,
+      name: row.name,
+      qrSlug: row.qr_slug,
+      createdAt: row.created_at,
+    },
+    con: {
+      id: row.con_id,
+      name: row.con_name,
+      startDate: row.con_start_date,
+      endDate: row.con_end_date,
+      location: row.con_location,
+      url: row.con_url,
+    },
+    myRole: me.role,
+  };
+  return c.json(body);
+});
+
+// ─── GET /api/rooms/:id/roommates/:rid ────────────────────────────────────
+// Self can read own row; admin can read anyone in the same room. No privacy
+// projection — this is the admin-side fetch that backs the editor UI.
+
+roomRoutes.get('/:id/roommates/:rid', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  const rid = c.req.param('rid');
+  const me = await requireRoommate(c, roomId);
+  const target = await getRoommate(c.env.DB, rid);
+  if (!target || target.room_id !== roomId) throw new HttpError(404, 'roommate_not_found');
+  if (target.id !== me.roommateId && me.role !== 'admin') {
+    throw new HttpError(403, 'self_or_admin_only');
+  }
+
+  // Avatar follows the target user's most-recently-updated identity.
+  const identity = await c.env.DB.prepare(
+    `SELECT avatar_url FROM identity WHERE user_id = ?
+      ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(target.user_id)
+    .first<{ avatar_url: string | null }>();
+
+  const body: Roommate = roommateRowToApi(target, identity?.avatar_url ?? null);
   return c.json(body);
 });
 

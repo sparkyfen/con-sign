@@ -221,6 +221,102 @@ export interface RoomRow {
   created_at: string;
 }
 
+/** All rooms the user is a member of, joined with con metadata + caller's role. */
+export async function listRoomsForUser(
+  db: D1Database,
+  userId: string,
+): Promise<
+  {
+    id: string;
+    name: string;
+    qr_slug: string;
+    role: 'admin' | 'member';
+    con_id: string;
+    con_name: string;
+    con_start_date: string | null;
+    con_end_date: string | null;
+  }[]
+> {
+  const result = await db
+    .prepare(
+      `SELECT room.id AS id, room.name AS name, room.qr_slug AS qr_slug,
+              roommate.role AS role,
+              con.id AS con_id, con.name AS con_name,
+              con.start_date AS con_start_date, con.end_date AS con_end_date
+         FROM room
+         JOIN roommate ON roommate.room_id = room.id
+         JOIN con      ON con.id = room.con_id
+        WHERE roommate.user_id = ?
+        ORDER BY con.start_date DESC, room.created_at DESC`,
+    )
+    .bind(userId)
+    .all<{
+      id: string;
+      name: string;
+      qr_slug: string;
+      role: 'admin' | 'member';
+      con_id: string;
+      con_name: string;
+      con_start_date: string | null;
+      con_end_date: string | null;
+    }>();
+  return result.results ?? [];
+}
+
+/** Room + con join for the room-detail endpoint. */
+export async function getRoomDetail(
+  db: D1Database,
+  roomId: string,
+): Promise<
+  | (RoomRow & {
+      con_name: string;
+      con_start_date: string | null;
+      con_end_date: string | null;
+      con_location: string | null;
+      con_url: string | null;
+    })
+  | null
+> {
+  return db
+    .prepare(
+      `SELECT room.*,
+              con.name AS con_name, con.start_date AS con_start_date,
+              con.end_date AS con_end_date, con.location AS con_location,
+              con.url AS con_url
+         FROM room JOIN con ON con.id = room.con_id
+        WHERE room.id = ?`,
+    )
+    .bind(roomId)
+    .first();
+}
+
+/** All identity rows for a user. Used by /api/auth/me. */
+export async function listIdentitiesForUser(
+  db: D1Database,
+  userId: string,
+): Promise<{ provider: 'bsky' | 'telegram'; handle: string | null; avatar_url: string | null }[]> {
+  const result = await db
+    .prepare(
+      `SELECT provider, handle, avatar_url FROM identity
+        WHERE user_id = ? ORDER BY created_at DESC`,
+    )
+    .bind(userId)
+    .all<{ provider: 'bsky' | 'telegram'; handle: string | null; avatar_url: string | null }>();
+  return result.results ?? [];
+}
+
+/** Display name on the user row. */
+export async function getUserDisplayName(
+  db: D1Database,
+  userId: string,
+): Promise<string | null> {
+  const row = await db
+    .prepare('SELECT display_name FROM user WHERE id = ?')
+    .bind(userId)
+    .first<{ display_name: string }>();
+  return row?.display_name ?? null;
+}
+
 // ─── devices ───────────────────────────────────────────────────────────────
 
 export interface DeviceRow {
