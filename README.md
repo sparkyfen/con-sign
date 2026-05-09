@@ -88,8 +88,9 @@ Per-package scripts:
 ## Status
 
 Backend is end-to-end working: BlueSky + Telegram login, per-roommate
-passcodes, room/roommate CRUD, visitor unlock + cookie projection, device
-endpoint, daily ICS sync. Deferred: PNG (vs. SVG) device render — only
-matters once e-ink hardware is picked. Next vertical slice: pair-code
-device bootstrap (mockups exist, no backend yet). See `PLAN.md` and
-`git log` for the latest.
+passcodes, room/roommate CRUD, visitor unlock + cookie projection, daily
+ICS sync (151 cons live), and **pair-code device bootstrap** (firmware
+UUID is the bearer; admin types a 6-char OTP shown on the panel; one
+endpoint dispatches unpaired/paired/revoked render). Deferred: PNG
+(vs. SVG) device render — only matters once e-ink hardware is picked.
+See `PLAN.md` and `git log` for the latest.
