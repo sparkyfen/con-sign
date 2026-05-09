@@ -287,10 +287,11 @@ roomRoutes.post('/:id/roommates/:rid/passcode', requireUser, async (c) => {
 });
 
 // ─── GET /api/rooms/:id/qr.png ────────────────────────────────────────────
-// Admin-only. Returns a PNG QR encoding the public room URL
+// Admin-only. Returns an SVG QR encoding the public room URL
 // (https://<host>/r/<slug>) for the dashboard's "Preview QR" affordance.
-// `qrcode` only exposes a Node Buffer API; we go via the data-URL form and
-// base64-decode the payload so we can ship raw bytes from the Worker.
+// We serve SVG (still at /qr.png to keep URL stable) because qrcode's PNG
+// path resolves to the canvas-bound browser entrypoint under the Worker
+// runtime; toString({type:'svg'}) is a pure string render with no DOM dep.
 
 roomRoutes.get('/:id/qr.png', requireUser, async (c) => {
   const roomId = c.req.param('id');
@@ -299,17 +300,14 @@ roomRoutes.get('/:id/qr.png', requireUser, async (c) => {
   if (!room) throw new HttpError(404, 'room_not_found');
 
   const url = `${origin(c)}/r/${room.qr_slug}`;
-  const dataUrl = await QRCode.toDataURL(url, {
-    type: 'image/png',
+  const svg = await QRCode.toString(url, {
+    type: 'svg',
     errorCorrectionLevel: 'M',
     margin: 2,
-    scale: 8,
   });
-  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-  const bytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
-  return new Response(bytes, {
+  return new Response(svg, {
     headers: {
-      'Content-Type': 'image/png',
+      'Content-Type': 'image/svg+xml; charset=utf-8',
       // Slug is stable; admin-only response so private cache is safe.
       'Cache-Control': 'private, max-age=3600',
     },

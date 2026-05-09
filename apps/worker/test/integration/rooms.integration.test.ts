@@ -33,7 +33,7 @@ describe('integration: room lifecycle', () => {
     expect(body.room.qrSlug).toMatch(/^[a-z0-9]{10}$/);
     expect(body.passcode.passcode).toMatch(/^[A-HJ-KM-NP-Z2-9]{8}$/);
     expect(body.passcode.shareUrl).toContain(`#k=${encodeURIComponent(body.passcode.passcode)}`);
-    expect(body.passcode.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(body.passcode.qrDataUrl).toMatch(/^data:image\/svg\+xml;utf8,/);
   });
 
   it('rejects creation when the con does not exist', async () => {
@@ -200,7 +200,7 @@ describe('integration: room lifecycle', () => {
     }
   });
 
-  it('serves a room QR PNG to admins, encoding the public room URL', async () => {
+  it('serves a room QR SVG to admins, encoding the public room URL', async () => {
     const ctx = newCtx();
     const conId = await seedCon(ctx);
     await loginAs(ctx, ADMIN);
@@ -208,15 +208,12 @@ describe('integration: room lifecycle', () => {
       body: { conId, name: 'Room' },
     })).body as RoomCreated;
 
-    // The shared `call` helper consumes the body as text and breaks on
-    // binary; fetch the PNG directly so we can assert raw bytes.
     const res = await fetchBinary(ctx, `/api/rooms/${created.room.id}/qr.png`);
     expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toBe('image/png');
-    const buf = new Uint8Array(await res.arrayBuffer());
-    // PNG magic: 89 50 4E 47 0D 0A 1A 0A
-    expect(Array.from(buf.slice(0, 8))).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    expect(buf.byteLength).toBeGreaterThan(200);
+    expect(res.headers.get('Content-Type')).toContain('image/svg+xml');
+    const text = await res.text();
+    expect(text).toMatch(/^<\?xml|^<svg/);
+    expect(text).toContain('</svg>');
   });
 
   it('refuses room QR to non-admins', async () => {
