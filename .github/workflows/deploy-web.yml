@@ -27,6 +27,9 @@ env:
   # Edit when the toolchain lands.
   BUILD_COMMAND: 'pnpm --filter @con-sign/web build'
   OUTPUT_DIR: 'apps/web/dist'
+  # Opt JavaScript actions into Node 24; @v4 majors of checkout/setup-node/
+  # action-setup still ship Node 20 which the runner deprecates Sep 2026.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 concurrency:
   group: pages-${{ github.ref }}
