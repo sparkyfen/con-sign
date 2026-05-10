@@ -373,6 +373,26 @@ export async function revokeDevice(db: D1Database, deviceId: string): Promise<vo
     .run();
 }
 
+/**
+ * Delete devices that have been silent past the cutoff. Catches both
+ * abandoned panels (`last_seen_at` older than the window) and devices
+ * created but never paired (no `last_seen_at`, judged by `created_at`).
+ * Returns the number of rows removed for cron logging.
+ */
+export async function deleteStaleDevices(
+  db: D1Database,
+  cutoffIso: string,
+): Promise<number> {
+  const result = await db
+    .prepare(
+      `DELETE FROM device
+        WHERE COALESCE(last_seen_at, created_at) < ?`,
+    )
+    .bind(cutoffIso)
+    .run();
+  return (result.meta as { changes?: number }).changes ?? 0;
+}
+
 export async function listDevicesForRoom(
   db: D1Database,
   roomId: string,

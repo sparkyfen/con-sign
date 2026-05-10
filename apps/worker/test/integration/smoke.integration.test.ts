@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { call, newCtx } from '../helpers.js';
 
 describe('integration: smoke', () => {
-  it('responds to /api/health', async () => {
+  it('responds to /api/health with component probes', async () => {
     const ctx = newCtx();
     const r = await call(ctx, 'GET', '/api/health');
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ ok: true });
+    expect(r.body).toEqual({ ok: true, components: { d1: true, kv: true } });
   });
 
   it('returns 404 on unknown routes', async () => {

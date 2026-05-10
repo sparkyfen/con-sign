@@ -1,5 +1,9 @@
 import type { Bindings } from '../types.js';
+import { deleteStaleDevices } from '../db/queries.js';
 import { parseIcs, type IcsEvent } from './ics-parse.js';
+
+/** Devices silent past this many days are deleted by the daily cron. */
+export const STALE_DEVICE_DAYS = 90;
 
 /**
  * Daily ICS sync. Fetches the furrycons.com calendar, parses VEVENTs, and
@@ -26,6 +30,22 @@ export async function runIcsSync(env: Bindings): Promise<{ ingested: number }> {
     await env.DB.batch(chunk.map((e) => upsertStatement(env.DB, e, now)));
   }
   return { ingested: events.length };
+}
+
+/**
+ * Delete `device` rows that haven't been seen in STALE_DEVICE_DAYS. Catches
+ * abandoned panels (paired but went silent) and devices that were created
+ * by an admin's claim but never polled afterward (judged by `created_at`
+ * via `COALESCE(last_seen_at, created_at)` in the query).
+ */
+export async function runStaleDeviceCleanup(
+  env: Bindings,
+  now: Date = new Date(),
+): Promise<{ deleted: number }> {
+  const cutoff = new Date(now.getTime() - STALE_DEVICE_DAYS * 86_400_000).toISOString();
+  const deleted = await deleteStaleDevices(env.DB, cutoff);
+  if (deleted > 0) console.log(`stale-device-cleanup: deleted ${deleted}`);
+  return { deleted };
 }
 
 function upsertStatement(db: D1Database, e: IcsEvent, now: string): D1PreparedStatement {

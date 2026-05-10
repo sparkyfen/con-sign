@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runIcsSync } from '../../src/cron/ics-sync.js';
+import {
+  STALE_DEVICE_DAYS,
+  runIcsSync,
+  runStaleDeviceCleanup,
+} from '../../src/cron/ics-sync.js';
 import { createTestBindings } from '../doubles.js';
 
 const FEED = `BEGIN:VCALENDAR
@@ -48,6 +52,35 @@ describe('integration: ICS sync', () => {
     await runIcsSync(env);
     const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM con').first<{ n: number }>();
     expect(count?.n).toBe(2);
+  });
+
+  it('stale-device cleanup deletes devices older than the cutoff', async () => {
+    const env = createTestBindings();
+    const dayMs = 86_400_000;
+    const now = new Date('2026-06-01T00:00:00Z');
+    const fresh = new Date(now.getTime() - 10 * dayMs).toISOString();
+    const stale = new Date(now.getTime() - (STALE_DEVICE_DAYS + 5) * dayMs).toISOString();
+    const created = new Date(now.getTime() - (STALE_DEVICE_DAYS + 1) * dayMs).toISOString();
+
+    // Three rows: one fresh (last_seen recent), one stale (last_seen old),
+    // one never-paired (no last_seen, just an old created_at).
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO device (id, last_seen_at, created_at) VALUES (?, ?, ?)`,
+      ).bind('fresh-device', fresh, fresh),
+      env.DB.prepare(
+        `INSERT INTO device (id, last_seen_at, created_at) VALUES (?, ?, ?)`,
+      ).bind('stale-device', stale, stale),
+      env.DB.prepare(
+        `INSERT INTO device (id, last_seen_at, created_at) VALUES (?, NULL, ?)`,
+      ).bind('never-paired', created),
+    ]);
+
+    const { deleted } = await runStaleDeviceCleanup(env, now);
+    expect(deleted).toBe(2);
+
+    const remaining = await env.DB.prepare('SELECT id FROM device').all<{ id: string }>();
+    expect(remaining.results.map((r) => r.id)).toEqual(['fresh-device']);
   });
 
   it('updates an existing entry when the feed changes the SUMMARY', async () => {

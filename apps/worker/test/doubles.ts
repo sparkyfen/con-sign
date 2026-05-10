@@ -10,7 +10,11 @@ import { join } from 'node:path';
 
 // ─── D1 ────────────────────────────────────────────────────────────────────
 
-type D1Result = { results: unknown[]; success: boolean; meta: { rows_read: number } };
+type D1Result = {
+  results: unknown[];
+  success: boolean;
+  meta: { rows_read: number; changes?: number };
+};
 
 class D1Statement {
   constructor(
@@ -35,7 +39,13 @@ class D1Statement {
 
   async run(): Promise<D1Result> {
     const info = this.sqlite.prepare(this.sql).run(...(this.params as []));
-    return { results: [], success: true, meta: { rows_read: info.changes } };
+    return {
+      results: [],
+      success: true,
+      // Mirror real D1: rows_read for SELECT (n/a here), changes for write
+      // statements. Some callers (e.g. cron cleanup) read meta.changes.
+      meta: { rows_read: info.changes, changes: info.changes },
+    };
   }
 }
 

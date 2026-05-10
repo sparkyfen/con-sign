@@ -9,7 +9,7 @@ import { deviceRoutes } from './routes/device.js';
 import { partyRoutes } from './routes/parties.js';
 import { roomRoutes } from './routes/rooms.js';
 import { visitorRoutes } from './routes/visitor.js';
-import { runIcsSync } from './cron/ics-sync.js';
+import { runIcsSync, runStaleDeviceCleanup } from './cron/ics-sync.js';
 
 export const app = new Hono<Env>();
 
@@ -30,7 +30,32 @@ app.onError((err, c) => {
   );
 });
 
-app.get('/api/health', (c) => c.json({ ok: true }));
+/**
+ * Liveness + binding probe. Each component independently pinged so a
+ * misconfigured binding shows up as `ok: false` for that component
+ * specifically, not a generic 500. Cheap enough to hit from uptime
+ * monitors at 1/min without worrying about D1 quota.
+ */
+app.get('/api/health', async (c) => {
+  const [d1, kv] = await Promise.all([
+    c.env.DB.prepare('SELECT 1 AS ok')
+      .first<{ ok: number }>()
+      .then((r) => r?.ok === 1)
+      .catch(() => false),
+    (async () => {
+      const probeKey = 'health:probe';
+      try {
+        await c.env.SESSIONS.put(probeKey, '1', { expirationTtl: 60 });
+        const v = await c.env.SESSIONS.get(probeKey);
+        return v === '1';
+      } catch {
+        return false;
+      }
+    })(),
+  ]);
+  const ok = d1 && kv;
+  return c.json({ ok, components: { d1, kv } }, ok ? 200 : 503);
+});
 
 app.route('/api/auth', authRoutes);
 app.route('/api/avatar', avatarRoutes);
@@ -46,5 +71,6 @@ export default {
   fetch: app.fetch,
   scheduled: (_controller, env, ctx) => {
     ctx.waitUntil(runIcsSync(env));
+    ctx.waitUntil(runStaleDeviceCleanup(env));
   },
 } satisfies ExportedHandler<Bindings>;
