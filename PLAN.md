@@ -205,10 +205,13 @@ Notes:
 
 ```
 # Auth
-POST   /api/auth/bsky/start           → redirect to BSky OAuth
-GET    /api/auth/bsky/callback
-POST   /api/auth/telegram/callback
-POST   /api/auth/logout
+GET    /api/auth/bsky/start?handle=…  → 302 to BSky OAuth
+GET    /api/auth/bsky/callback        → consume code; set cs_session; 302 /
+GET    /api/auth/bsky/client-metadata.json
+GET    /api/auth/bsky/jwks.json
+POST   /api/auth/telegram/callback    (TG Login Widget HMAC verify)
+GET    /api/auth/me                   → { userId, displayName, identities[] }
+POST   /api/auth/logout               (revokes jti via SESSIONS KV)
 
 # Visitor
 GET    /api/r/:slug                   → room view, projected per current cookie's
@@ -217,27 +220,37 @@ POST   /api/r/:slug/unlock            → { unlocked_roommate_ids[] }
 
 # Cons (read-only; ICS-synced)
 GET    /api/cons?q=...                → typeahead search
+POST   /api/cons/sync                 (manual ICS resync, requireUser)
 
-# Admin / roommate (logged in)
-POST   /api/rooms                     (body: con_id, name) creates room + admin
-POST   /api/rooms/:id/invite          → { invite_url }
-POST   /api/rooms/:id/join            (accept invite)
-GET    /api/rooms/:id
+# Avatars
+GET    /api/avatar/tg/:tgUserId       (Bot API stream-proxy)
+
+# Rooms (logged in)
+GET    /api/rooms                     → { rooms[] } caller's memberships
+POST   /api/rooms                     (body: conId, name) creates room + admin
+GET    /api/rooms/:id                 → { room, con, myRole }
 PATCH  /api/rooms/:id                 (name)
-DELETE /api/rooms/:id/roommates/:rid  (admin only; or self)
-PATCH  /api/roommates/:id             (own profile, status, fursona)
-PUT    /api/roommates/:id/visibility  (per-field min_tier)
-POST   /api/roommates/:id/passcode    → { passcode, share_url } (shown once,
-                                        rotates the existing one)
-POST   /api/rooms/:id/devices/claim   → { device_id } (admin enters 6-char OTP)
-GET    /api/rooms/:id/devices         → { devices[] } (paired list)
-DELETE /api/rooms/:id/devices/:dev_id → revokes (sets revoked_at)
+GET    /api/rooms/:id/membership      → { members[], isOnlyAdmin }
+GET    /api/rooms/:id/qr.png          (admin-only; SVG, content-type image/svg+xml)
+POST   /api/rooms/:id/invite          → { inviteUrl, expiresAt }
+POST   /api/rooms/join                (body: { token } from invite link)
 
-# Device
-GET    /api/device/sign.png           (bearer = device_id)
+# Roommates
+GET    /api/rooms/:id/roommates/:rid              (self or admin; full row)
+PATCH  /api/rooms/:id/roommates/:rid              (self only; profile, status)
+DELETE /api/rooms/:id/roommates/:rid              (admin only, or self; last-admin guard)
+GET    /api/rooms/:id/roommates/:rid/visibility   (self only)
+PUT    /api/rooms/:id/roommates/:rid/visibility   (self only)
+POST   /api/rooms/:id/roommates/:rid/passcode     (self only; rotates, returns once)
 
-# Stretch
-POST   /api/rooms/:id/parties
+# Devices
+POST   /api/rooms/:id/devices/claim   (admin enters 6-char OTP)
+GET    /api/rooms/:id/devices         → { devices[] }
+DELETE /api/rooms/:id/devices/:devId  (admin only; sets revoked_at)
+GET    /api/device/sign.png           (bearer = device UUID; unpaired/paired/revoked)
+
+# Stretch (stubbed)
+POST   /api/parties
 PATCH  /api/parties/:id
 DELETE /api/parties/:id
 ```
