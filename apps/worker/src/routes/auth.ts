@@ -45,7 +45,24 @@ authRoutes.get('/bsky/start', async (c) => {
 authRoutes.get('/bsky/callback', async (c) => {
   const client = await createBskyClient(c.env);
   const url = new URL(c.req.url);
-  const { session: oauthSession } = await client.callback(url.searchParams);
+
+  // client.callback() throws on expired state, replayed code, AS network
+  // blip, malformed redirect, etc. Without this catch the user lands on
+  // the generic 500 page with no actionable message; the frontend can't
+  // distinguish "your login expired, click to retry" from "we're broken."
+  // Convert all of those into a single 400 the UI can render as a
+  // "Bluesky sign-in didn't complete — try again" page.
+  let oauthSession;
+  try {
+    ({ session: oauthSession } = await client.callback(url.searchParams));
+  } catch (err) {
+    console.error('bsky callback failed', err);
+    throw new HttpError(
+      400,
+      'bsky_callback_failed',
+      'Bluesky sign-in could not complete. Start over from the login page.',
+    );
+  }
 
   const did = oauthSession.did;
   // Public AppView returns handle + avatar without needing the user's DPoP-

@@ -46,6 +46,9 @@ which sets the session cookie and 302s to `/`.
 
 ### `GET /api/auth/bsky/callback`
 Internal — only called by Bluesky's authorization server. Don't link to it.
+Errors: `400 bsky_callback_failed` for any flow failure (expired state,
+replayed code, AS error). The frontend should render this as "Bluesky
+sign-in didn't complete — try again from the login page."
 
 ### `GET /api/auth/bsky/client-metadata.json` and `GET /api/auth/bsky/jwks.json`
 Public OAuth client metadata + JWKS. Bluesky's AS fetches these directly.
