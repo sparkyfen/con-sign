@@ -1,0 +1,25 @@
+# con-sign
+
+> An e-ink "door sign" for hotel rooms at furry conventions. Roommates show
+> their fursonas, names, handles, and rough whereabouts. Random passersby
+> see a sanitized view; anyone who scans the QR and enters a per-roommate
+> passcode sees more detail; admins manage everything from the web UI.
+
+The site is in early development. Only the marketing splash is shipped to
+the public domain today; sign-in, dashboard, and visitor flows live in code
+but aren't wired into the splash yet.
+
+## Source
+
+- [GitHub repository](https://github.com/sparkyfen/con-sign)
+- [Design plan / canonical doc](https://github.com/sparkyfen/con-sign/blob/main/PLAN.md)
+- [API reference](https://github.com/sparkyfen/con-sign/blob/main/docs/api.md)
+- [Security disclosures](https://cons.social/.well-known/security.txt)
+
+## Stack
+
+- Frontend: SvelteKit on Cloudflare Pages
+- Backend: Cloudflare Worker (Hono) at `cons.social/api/*`
+- Database: Cloudflare D1
+- Sessions: Cloudflare KV
+- Auth: Bluesky OAuth (AT Protocol) + Telegram Login Widget

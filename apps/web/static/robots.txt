@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Visitor room views are public-by-slug but unindexed by intent — the
+# slug is meant to be shared person-to-person, not crawled.
+Disallow: /r/

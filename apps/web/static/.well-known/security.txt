@@ -1,0 +1,9 @@
+# https://www.rfc-editor.org/rfc/rfc9116
+# Coordinated disclosure preferred via private GitHub Security Advisory.
+# Email is a backup channel; expect a slower response.
+
+Contact: https://github.com/sparkyfen/con-sign/security/advisories/new
+Contact: mailto:sparky1010@gmail.com
+Expires: 2027-05-10T00:00:00Z
+Preferred-Languages: en
+Canonical: https://cons.social/.well-known/security.txt

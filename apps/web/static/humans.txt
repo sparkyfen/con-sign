@@ -1,0 +1,14 @@
+/* TEAM */
+
+  Sparky — design, code, ops
+  GitHub: https://github.com/sparkyfen
+
+
+/* SITE */
+
+  Last update: 2026-05-10
+  Standards: HTML5, CSS3
+  Components: SvelteKit, Cloudflare Pages, Cloudflare Workers, D1, KV
+  Tools: Pencil.dev, Wrangler, VS Code, Claude Code
+
+  Source: https://github.com/sparkyfen/con-sign
