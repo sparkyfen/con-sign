@@ -147,7 +147,8 @@ export interface TestBindings {
   ICS_FEED_URL: string;
   TURNSTILE_SITE_KEY: string;
   SESSION_HMAC: string;
-  BSKY_PRIVATE_JWK: string;
+  BSKY_PRIVATE_JWK?: string;
+  BSKY_PRIVATE_JWKS?: string;
   TG_BOT_TOKEN: string;
   TURNSTILE_SECRET: string;
 }
@@ -161,7 +162,11 @@ export function createTestBindings(overrides: Partial<TestBindings> = {}): TestB
     ICS_FEED_URL: 'https://example.invalid/test.ics',
     TURNSTILE_SITE_KEY: 'test-site-key',
     SESSION_HMAC: 'test-hmac-secret-do-not-use-in-prod',
-    BSKY_PRIVATE_JWK: '{}',
+    // Tests don't exercise the BSky OAuth flow; createBskyClient throws on
+    // empty config, but it's only called from the BSky routes which the
+    // current integration suite skips.
+    BSKY_PRIVATE_JWK: undefined,
+    BSKY_PRIVATE_JWKS: undefined,
     TG_BOT_TOKEN: 'test-bot-token',
     TURNSTILE_SECRET: 'test-turnstile-secret',
     ...overrides,

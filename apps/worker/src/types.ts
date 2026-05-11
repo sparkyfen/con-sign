@@ -13,8 +13,10 @@ export interface Bindings {
 
   // secrets
   SESSION_HMAC: string;
-  /** JSON-encoded private JWK (ES256) used for private_key_jwt + DPoP signing. */
-  BSKY_PRIVATE_JWK: string;
+  /** Legacy single private JWK. Wrapped into a 1-element array if BSKY_PRIVATE_JWKS is unset. */
+  BSKY_PRIVATE_JWK?: string;
+  /** JSON array of private JWKs (ES256). First key signs; all publish on /jwks.json. */
+  BSKY_PRIVATE_JWKS?: string;
   TG_BOT_TOKEN: string;
   TURNSTILE_SECRET: string;
 }

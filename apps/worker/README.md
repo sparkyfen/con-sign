@@ -18,19 +18,38 @@ pnpm db:migrate:local
 
 # Set required secrets (production)
 pnpm wrangler secret put SESSION_HMAC        # 64-char random hex
-pnpm run keygen:bsky | pnpm wrangler secret put BSKY_PRIVATE_JWK
+pnpm run keygen:bsky -- --jwks | pnpm wrangler secret put BSKY_PRIVATE_JWKS
 pnpm wrangler secret put TG_BOT_TOKEN        # Telegram bot token
 pnpm wrangler secret put TURNSTILE_SECRET    # Cloudflare Turnstile secret
 
 # For local dev, put the same keys in .dev.vars (gitignored):
 #   SESSION_HMAC=...
-#   BSKY_PRIVATE_JWK=...     # one-line JSON from `pnpm run keygen:bsky`
+#   BSKY_PRIVATE_JWKS=...    # JSON array from `pnpm run keygen:bsky -- --jwks`
 #   TG_BOT_TOKEN=...
 #   TURNSTILE_SECRET=...
 ```
 
-The matching public JWK is derived from `BSKY_PRIVATE_JWK` at request time
-and served at `/api/auth/bsky/jwks.json`.
+The matching public JWKs are derived from `BSKY_PRIVATE_JWKS` at request
+time and served at `/api/auth/bsky/jwks.json`.
+
+### Rotating the BSky signing key
+
+1. Mint the new key as a single-element array:
+   `pnpm run keygen:bsky -- --jwks`
+2. Read the current secret, prepend the new key, and put back:
+   ```bash
+   OLD=$(wrangler secret list --json | jq -r '...')   # or pull from your safe
+   NEW=$(pnpm run keygen:bsky -- --jwks)
+   echo "$(jq -s '.[0] + .[1]' <(echo "$NEW") <(echo "$OLD"))" \
+     | pnpm wrangler secret put BSKY_PRIVATE_JWKS
+   ```
+   The first key in the array signs new tokens; both publish on /jwks.json.
+3. Wait ~24h (ATProto refresh tokens are single-use and rotate per call;
+   JWKS cache is short — 24h is conservative).
+4. Drop the old key and re-put the secret. Done.
+
+The legacy single-key secret name `BSKY_PRIVATE_JWK` is still accepted for
+backwards compat; the loader wraps it into a 1-element array.
 
 ## Dashboard-side configuration
 

@@ -41,6 +41,39 @@ type SerializedSession = Omit<Session, 'dpopKey'> & {
   dpopKey: Record<string, unknown>;
 };
 
+/**
+ * Load every signing key the Worker should publish.
+ *
+ * Accepts two secret shapes for backwards compat with the original deploy:
+ *   - `BSKY_PRIVATE_JWKS`: JSON array of private JWKs (preferred). The
+ *     first entry signs; all entries publish.
+ *   - `BSKY_PRIVATE_JWK`: single JSON-encoded private JWK (legacy). Used
+ *     iff BSKY_PRIVATE_JWKS is unset.
+ *
+ * Rotation procedure:
+ *   1. Mint a new key with `pnpm run keygen:bsky`.
+ *   2. Prepend it to the existing JWKS array; deploy. New tokens sign with
+ *      the new key, the AS still verifies tokens issued with the old key
+ *      via /jwks.json.
+ *   3. Wait long enough for in-flight refresh tokens to be exchanged
+ *      (~24h is wildly conservative; ATProto refresh tokens are
+ *      single-use and rotate per call, JWKS cache is short).
+ *   4. Drop the old key on the next deploy.
+ */
+async function loadKeyset(env: Bindings): Promise<JoseKey[]> {
+  const raw = env.BSKY_PRIVATE_JWKS ?? (env.BSKY_PRIVATE_JWK ? `[${env.BSKY_PRIVATE_JWK}]` : null);
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as JWK[];
+  if (!Array.isArray(parsed)) {
+    throw new Error('BSKY_PRIVATE_JWKS must decode to an array of JWKs');
+  }
+  return Promise.all(
+    parsed.map((jwk, i) =>
+      JoseKey.fromJWK(withAlg(jwk) as unknown as Record<string, unknown>, jwk.kid ?? String(i)),
+    ),
+  );
+}
+
 function withAlg(jwk: JWK): JWK {
   if (jwk.alg) return jwk;
   if (jwk.kty === 'EC' && jwk.crv === 'P-256') return { ...jwk, alg: 'ES256' };
@@ -59,11 +92,10 @@ function withAlg(jwk: JWK): JWK {
  * `wrangler secret put BSKY_PRIVATE_JWK`.
  */
 export async function createBskyClient(env: Bindings): Promise<OAuthClient> {
-  if (!env.BSKY_PRIVATE_JWK) {
-    throw new Error('BSKY_PRIVATE_JWK secret is not set');
+  const keyset = await loadKeyset(env);
+  if (keyset.length === 0) {
+    throw new Error('No BSKY signing key configured (set BSKY_PRIVATE_JWKS or BSKY_PRIVATE_JWK)');
   }
-  const privateJwk = withAlg(JSON.parse(env.BSKY_PRIVATE_JWK) as JWK);
-  const signingKey = await JoseKey.fromJWK(privateJwk as unknown as Record<string, unknown>, '0');
 
   return new OAuthClient({
     fetch: globalThis.fetch,
@@ -100,7 +132,11 @@ export async function createBskyClient(env: Bindings): Promise<OAuthClient> {
       jwks_uri: JWKS_URL,
     },
 
-    keyset: [signingKey],
+    // First key in the array signs new client_assertion JWTs and DPoP
+    // proofs. The remaining keys are still published on /jwks.json so that
+    // any access tokens minted with the previous key (within the AS's JWKS
+    // cache window) continue to verify.
+    keyset,
 
     stateStore: {
       async set(key, value) {
