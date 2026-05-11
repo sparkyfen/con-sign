@@ -243,6 +243,10 @@ GET    /api/rooms/:id/roommates/:rid/visibility   (self only)
 PUT    /api/rooms/:id/roommates/:rid/visibility   (self only)
 POST   /api/rooms/:id/roommates/:rid/passcode     (self only; rotates, returns once)
 
+# Audit
+GET    /api/rooms/:id/audit            (member-readable; room's history)
+GET    /api/me/audit                   (caller's actions across all rooms)
+
 # Devices
 POST   /api/rooms/:id/devices/claim   (admin enters 6-char OTP)
 GET    /api/rooms/:id/devices         → { devices[] }

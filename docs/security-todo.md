@@ -12,146 +12,63 @@ Severity scale:
 
 ---
 
-## H1. `POST /api/rooms/:id/devices/claim` is not rate-limited
+## ~~H1. `POST /api/rooms/:id/devices/claim` is not rate-limited~~ ✅ landed `2c0cc18`
 
-**State.** The endpoint requires an admin session (`requireUser` +
-`requireAdmin`), but does not consult the `UNLOCK_RL` binding or any
-zone-level Rate Limiting Rule. A logged-in attacker (or an attacker who
-phishes one session) can submit codes as fast as the worker accepts.
-
-**Risk.** The pair-code keyspace is 32⁶ ≈ 10⁹. An attacker who has any
-admin session could brute-force every active 5-minute code in seconds —
-once they hit a real one, they pair *that device* into *their own* room
-and the panel starts displaying their content.
-
-**Fix.** Add a per-user limit on `/devices/claim` using the existing
-Workers Rate Limiting binding (or a second binding with a tighter window
-— e.g. 30 attempts/min per cookie). Return 429 with a clear error code.
-A zone-level Rate Limiting Rule on the path is also worth adding as a
-slug-global backstop, mirroring what we already have for `/api/r/*/unlock`.
-
-**Effort.** ~30 minutes plus a test.
-
-**Files.** `apps/worker/src/routes/rooms.ts` (`/devices/claim` handler),
-`apps/worker/wrangler.toml` (potentially a new RL binding), Cloudflare
-dashboard (zone rule).
+New `CLAIM_RL` binding (namespace 1002, 30 attempts/60s, keyed by userId).
+Returns 429 `claim_rate_limited`. Zone-level rule still optional as a
+slug-global backstop; not added since the per-user limit covers the
+realistic attack.
 
 ---
 
-## H2. `claimDevice` has a TOCTOU race on KV reads
+## ~~H2. `claimDevice` has a TOCTOU race on KV reads~~ ✅ landed `27eeebc`
 
-**State.** `consumePairCode` does `kv.get(codeKey)` → `kv.delete(codeKey)`
-→ `kv.delete(deviceKey)`. Between the get and the deletes, two concurrent
-requests can both observe the same code. KV has no atomic
-compare-and-delete primitive.
-
-**Risk.** Two admins who both hold the same code (e.g. a phished code
-forwarded to a confederate) can both claim the same device. The second
-`INSERT ... ON CONFLICT DO UPDATE` in `claimDevice` will then overwrite
-the first claim's `room_id`, silently transferring the device to the
-loser of the race.
-
-**Fix.** Two possible hardenings:
-- **Option A (cheap):** Make the second insert conditional. Move from the
-  current `ON CONFLICT DO UPDATE SET room_id = excluded.room_id` to a
-  CTE that only updates when the existing `room_id` is NULL or
-  `revoked_at` is set. Fail closed (409) on the loser. The first claim
-  wins, the second gets a clean error.
-- **Option B (thorough):** Use D1 as the authoritative store for the
-  pair code itself — a `pair_code` table with `(code PRIMARY KEY,
-  device_id, expires_at)`. INSERT is the atomic gate; on claim, run
-  `DELETE FROM pair_code WHERE code = ? RETURNING device_id`. SQLite has
-  RETURNING. KV becomes a cache rather than truth.
-
-**Recommendation.** Option A first (small diff, fixes the race in
-practice). Option B if/when we want to drop KV from this flow entirely.
-
-**Effort.** Option A: ~45 minutes plus a concurrency test using
-Promise.all to fire two claims simultaneously. Option B: ~2 hours plus
-migration.
-
-**Files.** `apps/worker/src/db/queries.ts` (`claimDevice`), test additions.
+Option A: SQL upsert now carries `WHERE device.room_id IS NULL OR
+device.revoked_at IS NOT NULL` on the conflict branch. Loser sees
+`meta.changes === 0` → handler returns 409 `device_already_claimed`. The
+KV race window still exists but the SQL is now the atomic gate so
+double-pairing can't actually happen. Option B (D1-as-truth for the
+code itself) deferred — not worth the migration unless we decide to
+drop KV from this flow.
 
 ---
 
-## M1. No CSRF protection on state-changing endpoints
+## ~~M1. No CSRF protection on state-changing endpoints~~ ✅ landed `8c4a1de`
 
-**State.** All `POST` / `PATCH` / `DELETE` endpoints rely on the
-`cs_session` cookie alone for authentication. The cookie is `SameSite=Lax`,
-which prevents most cross-origin form submissions but does not prevent a
-top-level navigation from a malicious site to e.g.
-`https://cons.social/api/rooms/.../devices/claim` if a logged-in admin
-clicks a crafted link. (Lax allows top-level GET; we don't accept GET on
-state-changing endpoints, so the actual exposure is narrower than it
-looks, but it's not zero.)
-
-**Risk.** An attacker can craft a page that auto-submits a JSON POST
-from a logged-in admin's browser, claiming a device the attacker is
-running into the admin's room without their consent — or revoking
-devices, or changing room metadata.
-
-**Fix.** Two options:
-- Require `Origin` header matches the worker's host on all
-  state-changing endpoints. Browsers always send `Origin` on
-  cross-origin requests; checking it is one middleware.
-- Add a double-submit token (`csrf_token` cookie + `X-CSRF-Token`
-  header), generated on login.
-
-**Recommendation.** Origin check first — it's a 10-line middleware and
-covers the realistic attack. Token-based CSRF if we decide to support
-non-browser clients with a different cookie strategy.
-
-**Effort.** ~30 minutes including a test.
-
-**Files.** New `apps/worker/src/auth/csrf.ts`, `index.ts` to wire it,
-plus tests.
+`csrfOriginCheck` middleware mounted globally. Every POST/PATCH/PUT/DELETE
+must arrive with an Origin header whose host equals the request URL's
+host; missing or mismatched gets 403. GET/HEAD/OPTIONS pass through
+(BSky's OAuth callback is GET). Token-based CSRF deferred — not needed
+unless we ever take non-browser body-bearing requests on these routes.
 
 ---
 
-## M2. BlueSky OAuth has a single signing key, no rotation
+## ~~M2. BlueSky OAuth has a single signing key, no rotation~~ ✅ landed `e0e5f29`
 
-**State.** `BSKY_PRIVATE_JWK` is one ES256 key, served as the only entry
-in the JWKS document. The JWKS spec supports multiple keys (with
-overlapping validity windows) precisely so you can rotate without
-breaking outstanding tokens.
-
-**Risk.** If we ever need to rotate this key (suspected compromise,
-periodic hygiene, scheduled rotation), the only path is to mint a new
-key and immediately invalidate every active session — there's no
-overlap window where both old and new signatures verify. In a real
-incident this means user-visible downtime.
-
-**Fix.** Accept a JSON array of JWKs in `BSKY_PRIVATE_JWKS` (replacing
-the singular). Sign with the first key, but publish all of them on
-`/jwks.json`. To rotate: prepend the new key, deploy, wait the longest
-session lifetime + slop, then drop the old key on the next deploy.
-
-**Effort.** ~45 minutes plus a test.
-
-**Files.** `apps/worker/src/auth/bsky/client.ts`,
-`apps/worker/src/types.ts`, key-gen helper script.
+Loader accepts `BSKY_PRIVATE_JWKS` (JSON array). First key signs new
+tokens, all keys publish on `/jwks.json` so in-flight refresh tokens
+verify across the rotation window. Legacy `BSKY_PRIVATE_JWK` still
+accepted (wrapped into a 1-element array). `keygen-bsky.mjs --jwks`
+prints the new array form. Rotation procedure documented in
+`apps/worker/README.md`. Per ATProto spec, 24h overlap is wildly
+conservative (refresh tokens are single-use and rotate per call).
 
 ---
 
-## M3. No audit log of pairing / revocation / admin actions
+## ~~M3. No audit log of pairing / revocation / admin actions~~ ✅ landed (this session)
 
-**State.** The worker writes nothing about who paired which device into
-which room, who promoted whom, who rotated which passcode, etc.
+`audit_log` table (migration `0003_audit_log.sql`) + `src/db/audit.ts`
+helper. All 9 Level-3 admin actions write: room.create, room.rename,
+room.invite_created, room.member_joined, room.member_removed,
+device.claim, device.revoke, roommate.passcode_rotated,
+roommate.visibility_changed. Reads:
+- `GET /api/rooms/:id/audit` (member-readable; the room's history)
+- `GET /api/me/audit` (caller's own actions across all rooms)
 
-**Risk.** Forensics after a compromise are limited to whatever
-Cloudflare logs give us (HTTP-level, not application semantic). For a
-multi-tenant app where multiple admins share a room, an admin acting in
-bad faith leaves no in-app trail.
-
-**Fix.** Add an `audit_log` table: `(id, actor_user_id, room_id, action,
-target_id, metadata_json, at)`. Write entries from every admin-action
-endpoint. A small admin "Activity" view in the dashboard renders these.
-
-**Effort.** ~3 hours: migration, helper, write-sites in 6-8 endpoints,
-read endpoint, tests.
-
-**Files.** New migration `0003_audit_log.sql`, new
-`apps/worker/src/db/audit.ts`, updates to most admin-action handlers.
+`recordAudit` swallows write failures (logged via console.error) so a
+broken audit table never breaks the underlying request. UI consumer
+deferred — no Activity screen in the mockup, but the read endpoints are
+useful for `wrangler d1 execute` during incident response right now.
 
 ---
 

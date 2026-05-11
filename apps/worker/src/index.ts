@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth.js';
 import { avatarRoutes } from './routes/avatar.js';
 import { conRoutes } from './routes/cons.js';
 import { deviceRoutes } from './routes/device.js';
+import { meRoutes } from './routes/me.js';
 import { partyRoutes } from './routes/parties.js';
 import { roomRoutes } from './routes/rooms.js';
 import { visitorRoutes } from './routes/visitor.js';
@@ -65,6 +66,7 @@ app.get('/api/health', async (c) => {
 app.route('/api/auth', authRoutes);
 app.route('/api/avatar', avatarRoutes);
 app.route('/api/cons', conRoutes);
+app.route('/api/me', meRoutes);
 app.route('/api/r', visitorRoutes);
 app.route('/api/rooms', roomRoutes);
 app.route('/api/device', deviceRoutes);

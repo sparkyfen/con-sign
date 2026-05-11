@@ -46,6 +46,8 @@ import {
   updateRoommateProfile,
 } from '../db/queries.js';
 import { consumePairCode } from '../auth/pair-code.js';
+import { listAuditForRoom, recordAudit, type AuditRow } from '../db/audit.js';
+import type { AuditEntry, AuditList } from '@con-sign/shared';
 
 export const roomRoutes = new Hono<Env>();
 
@@ -73,6 +75,18 @@ async function requireAdmin(
 
 const origin = (c: Context<Env>): string => new URL(c.req.url).origin;
 
+const rowToEntry = (r: AuditRow): AuditEntry => ({
+  id: r.id,
+  actorUserId: r.actor_user_id,
+  roomId: r.room_id,
+  action: r.action as AuditEntry['action'],
+  targetId: r.target_id,
+  metadata: r.metadata_json
+    ? (JSON.parse(r.metadata_json) as Record<string, unknown>)
+    : null,
+  at: r.at,
+});
+
 // ─── POST /api/rooms ──────────────────────────────────────────────────────
 // Create a room. Caller becomes the first admin roommate. A personal
 // passcode is generated for them and returned ONCE.
@@ -94,6 +108,14 @@ roomRoutes.post('/', requireUser, async (c) => {
     passcodeHash,
   });
   const share = await buildShareArtifacts({ origin: origin(c), qrSlug, passcode });
+
+  await recordAudit(c.env.DB, {
+    actorUserId: userId,
+    roomId,
+    action: 'room.create',
+    targetId: roomId,
+    metadata: { name: body.name, conId: body.conId },
+  });
 
   return c.json({
     room: { id: roomId, qrSlug, name: body.name, conId: body.conId },
@@ -199,14 +221,35 @@ roomRoutes.get('/:id/roommates/:rid', requireUser, async (c) => {
   return c.json(body);
 });
 
+// ─── GET /api/rooms/:id/audit ─────────────────────────────────────────────
+// Audit trail for the room. Member-readable so non-admin members can see
+// who let in / removed roommates and managed shared resources. Admin-only
+// would hide too much from people who legitimately need to know.
+
+roomRoutes.get('/:id/audit', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  await requireRoommate(c, roomId);
+  const rows = await listAuditForRoom(c.env.DB, roomId);
+  const body: AuditList = { entries: rows.map(rowToEntry) };
+  return c.json(body);
+});
+
 // ─── PATCH /api/rooms/:id ─────────────────────────────────────────────────
 
 roomRoutes.patch('/:id', requireUser, async (c) => {
   const roomId = c.req.param('id');
-  await requireAdmin(c, roomId);
+  const me = await requireAdmin(c, roomId);
   const patch = updateRoomSchema.parse(await c.req.json());
   if (patch.name !== undefined) {
+    const before = await getRoom(c.env.DB, roomId);
     await updateRoomName(c.env.DB, roomId, patch.name);
+    await recordAudit(c.env.DB, {
+      actorUserId: me.userId,
+      roomId,
+      action: 'room.rename',
+      targetId: roomId,
+      metadata: { from: before?.name, to: patch.name },
+    });
   }
   return c.json({ ok: true });
 });
@@ -215,7 +258,7 @@ roomRoutes.patch('/:id', requireUser, async (c) => {
 
 roomRoutes.post('/:id/invite', requireUser, async (c) => {
   const roomId = c.req.param('id');
-  await requireAdmin(c, roomId);
+  const me = await requireAdmin(c, roomId);
   const room = await getRoom(c.env.DB, roomId);
   if (!room) throw new HttpError(404, 'room_not_found');
 
@@ -223,6 +266,12 @@ roomRoutes.post('/:id/invite', requireUser, async (c) => {
   const body: InviteResponse = inviteResponseSchema.parse({
     inviteUrl: `${origin(c)}/invite/${token}`,
     expiresAt: new Date(exp * 1000).toISOString(),
+  });
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'room.invite_created',
+    metadata: { expiresAt: body.expiresAt },
   });
   return c.json(body);
 });
@@ -277,6 +326,12 @@ roomRoutes.post('/join', requireUser, async (c) => {
     qrSlug: room!.qr_slug,
     passcode,
   });
+  await recordAudit(c.env.DB, {
+    actorUserId: userId,
+    roomId,
+    action: 'room.member_joined',
+    targetId: roommateId,
+  });
   return c.json({ roommateId, role: 'member' as const, passcode: share });
 });
 
@@ -307,6 +362,13 @@ roomRoutes.delete('/:id/roommates/:rid', requireUser, async (c) => {
   }
 
   await deleteRoommate(c.env.DB, rid);
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'room.member_removed',
+    targetId: rid,
+    metadata: { self: isSelf, removedRole: target.role },
+  });
   return c.json({ ok: true });
 });
 
@@ -343,6 +405,13 @@ roomRoutes.put('/:id/roommates/:rid/visibility', requireUser, async (c) => {
   if (me.roommateId !== rid) throw new HttpError(403, 'self_only');
   const body = updateFieldVisibilitySchema.parse(await c.req.json());
   await setVisibility(c.env.DB, rid, body.visibility);
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'roommate.visibility_changed',
+    targetId: rid,
+    metadata: { fields: Object.keys(body.visibility) },
+  });
   return c.json({ ok: true });
 });
 
@@ -366,6 +435,12 @@ roomRoutes.post('/:id/roommates/:rid/passcode', requireUser, async (c) => {
     origin: origin(c),
     qrSlug: room.qr_slug,
     passcode,
+  });
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'roommate.passcode_rotated',
+    targetId: rid,
   });
   return c.json(share);
 });
@@ -424,6 +499,12 @@ roomRoutes.post('/:id/devices/claim', requireUser, async (c) => {
 
   const claimed = await claimDevice(c.env.DB, { deviceId, roomId });
   if (!claimed) throw new HttpError(409, 'device_already_claimed');
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'device.claim',
+    targetId: deviceId,
+  });
   return c.json({ deviceId });
 });
 
@@ -443,7 +524,7 @@ roomRoutes.get('/:id/devices', requireUser, async (c) => {
 roomRoutes.delete('/:id/devices/:deviceId', requireUser, async (c) => {
   const roomId = c.req.param('id');
   const deviceId = c.req.param('deviceId');
-  await requireAdmin(c, roomId);
+  const me = await requireAdmin(c, roomId);
 
   // Sanity check: only let the room's admins revoke devices that belong to
   // this room (don't leak across tenants).
@@ -452,5 +533,11 @@ roomRoutes.delete('/:id/devices/:deviceId', requireUser, async (c) => {
     throw new HttpError(404, 'device_not_found');
   }
   await revokeDevice(c.env.DB, deviceId);
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'device.revoke',
+    targetId: deviceId,
+  });
   return c.json({ ok: true });
 });
