@@ -90,10 +90,21 @@ Per-package scripts:
 
 ## Status
 
+**Live at https://cons.social** — Coming Soon splash is the first page;
+the rest of the UI lands incrementally.
+
 Backend is end-to-end working: BlueSky + Telegram login, per-roommate
 passcodes, room/roommate CRUD, visitor unlock + cookie projection, daily
-ICS sync (151 cons live), and **pair-code device bootstrap** (firmware
-UUID is the bearer; admin types a 6-char OTP shown on the panel; one
-endpoint dispatches unpaired/paired/revoked render). Deferred: PNG
-(vs. SVG) device render — only matters once e-ink hardware is picked.
-See `PLAN.md` and `git log` for the latest.
+ICS sync (151 cons live), pair-code device bootstrap (firmware UUID is
+the bearer; admin types a 6-char OTP shown on the panel; one endpoint
+dispatches unpaired/paired/revoked render), audit log of admin actions,
+and a security pass covering rate limiting, TOCTOU race in claim, CSRF
+Origin enforcement, JWKS rotation, and an audit trail (see
+`docs/security-todo.md` for the resolved items + remaining
+designed-as-accepted notes).
+
+Frontend (SvelteKit) is scaffolded and shipping pages: splash is live;
+`/login` is next. Deferred: PNG (vs. SVG) device render — only matters
+once e-ink hardware is picked.
+
+See `PLAN.md`, `docs/api.md`, and `git log` for the latest.
