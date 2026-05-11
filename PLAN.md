@@ -12,7 +12,8 @@ choice, data model, auth, privacy tiers, and a v1/stretch breakdown.
 
 **Decisions already locked in (from clarifying Qs):**
 
-- **Frontend:** Pencil.dev (TypeScript/React-flavored).
+- **Frontend:** SvelteKit 2 + Svelte 5 on Cloudflare Pages
+  (`@sveltejs/adapter-cloudflare`); Pencil.dev sources the visual design.
 - **Backend runtime:** Cloudflare Workers (TypeScript). Same language end-to-end.
 - **Database:** Cloudflare D1 (SQLite at the edge). Relational data fits naturally;
   KV/DO can be added later for sessions or live-status push.
@@ -47,7 +48,7 @@ choice, data model, auth, privacy tiers, and a v1/stretch breakdown.
 
 ```
 ┌──────────────┐   BSky/TG OAuth   ┌────────────────────┐
-│  Pencil.dev  │ ◀───────────────▶ │  Cloudflare Worker │
+│  SvelteKit   │ ◀───────────────▶ │  Cloudflare Worker │
 │  Web UI      │   /api/* (JSON)   │  (Hono router)     │
 └──────────────┘                   │                    │
                                    │  ┌──────────────┐  │
@@ -61,7 +62,7 @@ choice, data model, auth, privacy tiers, and a v1/stretch breakdown.
 ```
 
 - **One Worker** serves the API, the public visitor JSON, and the device PNG
-  endpoint. Pencil.dev frontend deploys to Cloudflare Pages and calls the
+  endpoint. SvelteKit frontend deploys to Cloudflare Pages and calls the
   Worker. (Pages + Worker can share a project; same domain, no CORS.)
 - **D1** holds all relational state.
 - **KV** (optional, low-cost) holds session tokens and short-lived passcode
@@ -316,7 +317,7 @@ edit own visibility.
 ```
 con-sign/
   apps/
-    web/          # Pencil.dev frontend → Cloudflare Pages
+    web/          # SvelteKit frontend → Cloudflare Pages
     worker/       # Hono app → Cloudflare Worker
       src/
         index.ts

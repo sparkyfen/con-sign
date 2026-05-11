@@ -3,8 +3,26 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Pencil.dev frontend. Toolchain (Vite/Next/etc) to be set up by the web partner once mockups land. Will depend on @con-sign/shared for API types.",
+  "description": "con-sign Pages frontend — SvelteKit on Cloudflare Pages. Consumes the Worker API via /api/*.",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
   "dependencies": {
-    "@con-sign/shared": "workspace:*"
+    "@con-sign/shared": "workspace:*",
+    "@sveltejs/adapter-cloudflare": "^7.2.8",
+    "lucide-svelte": "^0.468.0"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.57.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "svelte": "^5.55.2",
+    "svelte-check": "^4.4.6",
+    "typescript": "^5.6.2",
+    "vite": "^8.0.7"
   }
 }

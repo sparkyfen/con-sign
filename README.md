@@ -8,7 +8,9 @@ Production: **[cons.social](https://cons.social)**.
 
 ## Stack
 
-- **Frontend** — Pencil.dev (Cloudflare Pages, owns the apex).
+- **Frontend** — SvelteKit 2 + Svelte 5 (runes), TypeScript, Vite,
+  `@sveltejs/adapter-cloudflare`. Deploys to Cloudflare Pages on the
+  apex; Pencil mockups source the design.
 - **Backend** — Cloudflare Worker (Hono, TypeScript), routed at
   `cons.social/api/*`.
 - **Database** — Cloudflare D1 (SQLite at the edge).
@@ -76,7 +78,8 @@ Per-package scripts:
 - `apps/worker` — `pnpm --filter @con-sign/worker dev` (Wrangler local).
   Setup, secrets, and D1/KV provisioning live in
   [`apps/worker/README.md`](apps/worker/README.md).
-- `apps/web` — placeholder; Pencil.dev export lands here.
+- `apps/web` — SvelteKit Pages app (`pnpm --filter @con-sign/web dev`).
+  Dev server proxies `/api/*` to a locally-run Worker.
 - `packages/shared` — pure TS, no build step (consumed via workspace `main`).
 
 ## Deployment

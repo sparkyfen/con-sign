@@ -1,0 +1,54 @@
+/*
+ * Design tokens — mirrors the Pencil mockup's monochrome ink-on-paper
+ * palette. The mockup defines `$--ink`, `$--paper`, `$--ink-50`, etc;
+ * we expose them as CSS custom properties so components can reference
+ * a single source of truth and we can flip a future light/dark mode.
+ *
+ * Fonts: IBM Plex Serif for body and Plex Mono for codes/labels per the
+ * mockup. Loaded from the system if present; falls back to UI defaults
+ * to avoid a network dep on the first paint.
+ */
+
+:root {
+  --paper: #ffffff;
+  --ink: #111111;
+  --ink-75: #3d3d3d;
+  --ink-50: #757575;
+  --ink-25: #c2c2c2;
+  --ink-10: #ececec;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-eink: 0; /* Mockup uses sharp rectangles for panel chrome */
+
+  --font-serif: 'IBM Plex Serif', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
