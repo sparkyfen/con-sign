@@ -4,8 +4,9 @@
   hits at 768px (between the mockup widths). Marketing-only — logged-in
   users won't be redirected away yet; this is the unauth entry point.
 
-  Sign In links to /login (not yet implemented). Falling back to a 404
-  is acceptable for now since this is the marketing splash.
+  Sign In is rendered disabled (matches the mockup's muted `--ink-25`
+  color) since /login isn't built yet. Swap the <span> back to an <a
+  href="/login"> when the login page lands.
 -->
 <svelte:head>
   <title>con-sign — your door has lore now</title>
@@ -14,7 +15,7 @@
 <div class="page">
   <nav class="nav">
     <span class="wordmark">CON·SIGN</span>
-    <a class="signin" href="/login">SIGN IN</a>
+    <span class="signin" aria-disabled="true" title="Sign-in coming soon">SIGN IN</span>
   </nav>
 
   <section class="hero">
@@ -91,10 +92,8 @@
     font-weight: 500;
     letter-spacing: 2px;
     color: var(--ink-25);
-    text-decoration: none;
-  }
-  .signin:hover {
-    color: var(--ink);
+    cursor: not-allowed;
+    user-select: none;
   }
 
   /* ─── hero ────────────────────────────────────────────────────────── */
