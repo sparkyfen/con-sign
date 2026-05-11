@@ -12,12 +12,8 @@
   <title>con-sign — your door has lore now</title>
   <link rel="canonical" href="https://cons.social/" />
 
-  <!--
-    Open Graph + Twitter Card. No og:image yet (TODO: ship a static
-    /og.png with the Playfair headline so Slack/iMessage/Discord
-    previews look like the splash). Until then, summary card renders
-    cleanly without an image.
-  -->
+  <!-- Open Graph + Twitter Card. og.png is 1200x630, mirrors the splash
+       typography (Playfair headline + cons.social wordmark). -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://cons.social/" />
   <meta property="og:site_name" content="con-sign" />
@@ -27,13 +23,22 @@
     content="Stick an e-ink screen on your hotel door. Update your status from your phone. Never answer 'where are you' again."
   />
   <meta property="og:locale" content="en_US" />
+  <meta property="og:image" content="https://cons.social/og.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta
+    property="og:image:alt"
+    content="Editorial typography: 'YOUR DOOR HAS LORE NOW.' over 'cons.social'"
+  />
 
-  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="con-sign — your door has lore now" />
   <meta
     name="twitter:description"
     content="Stick an e-ink screen on your hotel door. Update your status from your phone. Never answer 'where are you' again."
   />
+  <meta name="twitter:image" content="https://cons.social/og.png" />
 </svelte:head>
 
 <div class="page">
