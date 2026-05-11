@@ -10,6 +10,30 @@
 -->
 <svelte:head>
   <title>con-sign — your door has lore now</title>
+  <link rel="canonical" href="https://cons.social/" />
+
+  <!--
+    Open Graph + Twitter Card. No og:image yet (TODO: ship a static
+    /og.png with the Playfair headline so Slack/iMessage/Discord
+    previews look like the splash). Until then, summary card renders
+    cleanly without an image.
+  -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://cons.social/" />
+  <meta property="og:site_name" content="con-sign" />
+  <meta property="og:title" content="con-sign — your door has lore now" />
+  <meta
+    property="og:description"
+    content="Stick an e-ink screen on your hotel door. Update your status from your phone. Never answer 'where are you' again."
+  />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="con-sign — your door has lore now" />
+  <meta
+    name="twitter:description"
+    content="Stick an e-ink screen on your hotel door. Update your status from your phone. Never answer 'where are you' again."
+  />
 </svelte:head>
 
 <div class="page">

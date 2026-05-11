@@ -6,6 +6,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#111111" />
     <meta name="description" content="con-sign — fursona room sign for furry conventions." />
+    <meta name="theme-color" content="#1a1a1a" />
+
+    <!--
+      Site-wide WebSite schema. Pages can add their own JSON-LD via
+      <svelte:head> for page-specific entities (Organization, BreadcrumbList,
+      etc.). One source of truth for site name + URL keeps it consistent.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "con-sign",
+        "alternateName": "CON·SIGN",
+        "url": "https://cons.social",
+        "description": "An e-ink door sign for hotel rooms at furry conventions.",
+        "inLanguage": "en"
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
