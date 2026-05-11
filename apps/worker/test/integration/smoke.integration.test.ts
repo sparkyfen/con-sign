@@ -22,4 +22,16 @@ describe('integration: smoke', () => {
     });
     expect(r.status).toBe(401);
   });
+
+  it('does not leak raw error messages on unexpected failures', async () => {
+    // Drop a table the cons typeahead reads from to force a D1 error.
+    const ctx = newCtx();
+    await ctx.env.DB.prepare('DROP TABLE con').run();
+    const r = await call(ctx, 'GET', '/api/cons');
+    expect(r.status).toBe(500);
+    const body = r.body as { error: string; message?: string };
+    expect(body.error).toBe('internal_error');
+    // No leaked SQL / D1 message in the response body.
+    expect(body.message).toBeUndefined();
+  });
 });

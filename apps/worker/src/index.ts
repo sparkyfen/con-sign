@@ -22,14 +22,12 @@ app.onError((err, c) => {
   if (err instanceof HttpError) {
     return c.json({ error: err.code, message: err.message }, err.status);
   }
+  // Unknown failure — log the detail server-side so it shows up in
+  // `wrangler tail`, but don't echo it back to the client. Raw error
+  // messages from D1 / fetch / JSON.parse can leak schema, internal
+  // hostnames, or payload contents we'd rather keep server-side.
   console.error('unhandled error', err);
-  return c.json(
-    {
-      error: 'internal_error',
-      message: err instanceof Error ? err.message : String(err),
-    },
-    500,
-  );
+  return c.json({ error: 'internal_error' }, 500);
 });
 
 /**
