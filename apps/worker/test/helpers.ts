@@ -61,6 +61,12 @@ export async function call(
     headers.set('Content-Type', 'application/json');
   }
   if (ctx.cookies.size > 0) headers.set('Cookie', cookieHeader(ctx.cookies));
+  // Simulate a browser: same-host Origin on body-bearing methods. Tests that
+  // exercise the CSRF middleware override this header explicitly.
+  const m = method.toUpperCase();
+  if ((m === 'POST' || m === 'PATCH' || m === 'PUT' || m === 'DELETE') && !headers.has('Origin')) {
+    headers.set('Origin', ORIGIN);
+  }
 
   const req = new Request(`${ORIGIN}${path}`, {
     method,
