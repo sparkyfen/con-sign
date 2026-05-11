@@ -20,9 +20,17 @@ import {
   and respond `401 { error: "unauthenticated" }` if missing/invalid.
 - **Visitor unlock**: separate per-room `cs_unlock_<roomId>` cookies; additive
   across roommates within a room, 24-hour TTL.
+- **CSRF / Origin**: every state-changing method (`POST`, `PATCH`, `PUT`,
+  `DELETE`) must carry an `Origin` header whose host matches the request
+  URL's host. Browsers send this automatically on same-origin fetches, so
+  there's nothing to do from a normal frontend. A request with a missing
+  or mismatched Origin gets `403 { error: "origin_required" | "origin_invalid"
+  | "origin_mismatch" }`. `GET` / `HEAD` / `OPTIONS` are exempt.
 - **Errors**: every non-2xx response is `{ error: string, message?: string }`.
   Validation failures from zod come back as `400 { error: "invalid_request",
-  issues: [...] }` with the standard zod issue array.
+  issues: [...] }` with the standard zod issue array. Unexpected server
+  failures return a generic `500 { error: "internal_error" }` — no detail
+  is leaked client-side; check `wrangler tail` for the underlying cause.
 - **Content type**: requests with bodies should send
   `Content-Type: application/json`. Responses are `application/json` except
   the device sign and the room QR (both `image/svg+xml`).
@@ -251,7 +259,14 @@ unlocks for other roommates in the room are unaffected.
 ### `POST /api/rooms/:id/devices/claim` *(admin required)*
 Body: `ClaimDevice` — `{ code: string }`. The 6-char OTP shown on the
 unpaired panel; case-insensitive, spaces/dashes stripped server-side.
-Response: `{ deviceId: string }`. Errors: `404 pair_code_unknown_or_expired`.
+Response: `{ deviceId: string }`.
+
+Errors:
+- `404 pair_code_unknown_or_expired` — code typo, expired, or already used.
+- `409 device_already_claimed` — another claim won a race for the same
+  device. Refresh the panel; it should show a new code.
+- `429 claim_rate_limited` — per-user limit (30 attempts / 60s) tripped.
+  Defends against brute-forcing the 6-char keyspace from a stolen session.
 
 ### `GET /api/rooms/:id/devices` *(member required)*
 Response: `DeviceList` —
@@ -279,8 +294,46 @@ Three render branches selected automatically:
 ## Health
 
 ### `GET /api/health`
-Probes D1 + KV. `200 { ok: true, components: { d1: true, kv: true } }`
-when both work; `503` with the failing component flagged otherwise.
+Probes D1 + KV.
+```json
+200 { "ok": true,  "components": { "d1": true,  "kv": true  } }
+503 { "ok": false, "components": { "d1": false, "kv": true  } }   // example
+```
+Cheap to hit at 1/min from uptime monitors. The `components` map lets you
+distinguish a misconfigured binding from a Worker outage.
+
+---
+
+## Audit log
+
+### `GET /api/rooms/:id/audit` *(member required)*
+Every audit entry for the room (newest first, capped at 100). Member-readable
+on purpose — non-admin members deserve to know who let in / removed
+roommates and managed shared resources. Strangers get `403 not_a_member`.
+Response: `AuditList` —
+```json
+{
+  "entries": [{
+    "id": "uuid",
+    "actorUserId": "uuid",
+    "roomId": "uuid",
+    "action": "device.claim",
+    "targetId": "device-uuid",
+    "metadata": { ... },     // action-specific, may be null
+    "at": "ISO8601"
+  }]
+}
+```
+
+### `GET /api/me/audit` *(auth required)*
+Same shape, but filtered to actions the caller themselves performed,
+across every room they're in. Useful for "did I really change this last
+week?" and for cross-room recall on power users.
+
+Action vocabulary (more may be added without API breakage):
+`room.create`, `room.rename`, `room.invite_created`, `room.member_joined`,
+`room.member_removed`, `device.claim`, `device.revoke`,
+`roommate.passcode_rotated`, `roommate.visibility_changed`.
 
 ---
 
