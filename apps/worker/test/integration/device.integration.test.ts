@@ -103,6 +103,35 @@ describe('integration: device endpoint (pair-code flow)', () => {
     expect(r.status).toBe(404);
   });
 
+  it('rejects a duplicate claim that races a winning one (TOCTOU guard)', async () => {
+    const { ctx, roomId } = await setupRoom();
+    // Pre-seed a device row already paired to a different room so the
+    // conflict branch's WHERE rejects the second insert.
+    const otherConId = await seedCon(ctx, { name: 'Other con' });
+    const otherRoom = (await call(ctx, 'POST', '/api/rooms', {
+      body: { conId: otherConId, name: 'Other' },
+    })).body as RoomCreated;
+    await ctx.env.SESSIONS.put(`pair:code:RACE01`, DEVICE_A);
+    await ctx.env.SESSIONS.put(`pair:dev:${DEVICE_A}`, 'RACE01');
+    const win = await call(ctx, 'POST', `/api/rooms/${otherRoom.room.id}/devices/claim`, {
+      body: { code: 'RACE01' },
+    });
+    expect(win.status).toBe(200);
+
+    // Re-seed the (now-consumed) code so the second claim reaches claimDevice.
+    await ctx.env.SESSIONS.put(`pair:code:RACE02`, DEVICE_A);
+    await ctx.env.SESSIONS.put(`pair:dev:${DEVICE_A}`, 'RACE02');
+    const lose = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code: 'RACE02' },
+    });
+    expect(lose.status).toBe(409);
+    expect((lose.body as { error: string }).error).toBe('device_already_claimed');
+
+    // Device is still paired to the first room.
+    const r = await call(ctx, 'GET', `/api/rooms/${otherRoom.room.id}/devices`);
+    expect((r.body as { devices: { id: string }[] }).devices.map((d) => d.id)).toEqual([DEVICE_A]);
+  });
+
   it('rate-limits brute-force claim attempts (CLAIM_RL)', async () => {
     const { ctx, roomId } = await setupRoom();
     // Replace the always-pass stub with a deterministic one: third call fails.

@@ -422,7 +422,8 @@ roomRoutes.post('/:id/devices/claim', requireUser, async (c) => {
   const deviceId = await consumePairCode(c.env.SESSIONS, body.code);
   if (!deviceId) throw new HttpError(404, 'pair_code_unknown_or_expired');
 
-  await claimDevice(c.env.DB, { deviceId, roomId });
+  const claimed = await claimDevice(c.env.DB, { deviceId, roomId });
+  if (!claimed) throw new HttpError(409, 'device_already_claimed');
   return c.json({ deviceId });
 });
 

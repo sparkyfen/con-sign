@@ -340,17 +340,27 @@ export async function touchDevice(db: D1Database, deviceId: string): Promise<voi
 }
 
 /**
- * Atomically pair a device to a room. Inserts a new row if the device hasn't
- * been seen yet (the unpaired-state lives in KV, not D1, so this is the
- * first time the device gains a D1 row). If the device was previously
- * revoked, clear `revoked_at`.
+ * Atomically pair a device to a room. Returns true on success, false when
+ * the device already belongs to a (different) room and is not revoked —
+ * the caller should surface a 409 in that case.
+ *
+ * Two pathways succeed:
+ *   - Fresh INSERT: device row didn't exist yet (unpaired state lives in
+ *     KV, this is the first D1 row).
+ *   - Conflict UPDATE gated by WHERE: row exists but is unclaimed
+ *     (room_id IS NULL) or previously revoked (revoked_at IS NOT NULL).
+ *
+ * The WHERE on the conflict branch closes a TOCTOU race between two
+ * concurrent claim requests that both see the same KV pair code: the
+ * second insert is allowed to fall into the conflict branch, but the
+ * UPDATE is skipped — meta.changes comes back as 0 and we return false.
  */
 export async function claimDevice(
   db: D1Database,
   args: { deviceId: string; roomId: string },
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date().toISOString();
-  await db
+  const result = await db
     .prepare(
       `INSERT INTO device (id, room_id, paired_at, last_seen_at)
        VALUES (?, ?, ?, ?)
@@ -358,10 +368,12 @@ export async function claimDevice(
          room_id = excluded.room_id,
          paired_at = excluded.paired_at,
          revoked_at = NULL,
-         last_seen_at = excluded.last_seen_at`,
+         last_seen_at = excluded.last_seen_at
+       WHERE device.room_id IS NULL OR device.revoked_at IS NOT NULL`,
     )
     .bind(args.deviceId, args.roomId, now, now)
     .run();
+  return ((result.meta as { changes?: number }).changes ?? 0) > 0;
 }
 
 /** Revoke a device. Clears the room link so future polls render the
