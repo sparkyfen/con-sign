@@ -32,6 +32,18 @@ type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 10, period = 60 }
 
+# Per-session cap on /api/rooms/:id/devices/claim attempts. Defends against a
+# logged-in attacker brute-forcing the 5-minute pair-code keyspace (32^6).
+# 30 attempts/60s allows the legitimate "I mistyped the code" case while
+# stopping any meaningful brute-force cold. Keyed by session jti so a
+# stolen session can't escape its own bucket. Different namespace_id from
+# UNLOCK_RL so the buckets don't share state.
+[[unsafe.bindings]]
+name = "CLAIM_RL"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 30, period = 60 }
+
 # ─── Cron Trigger (daily ICS sync from furrycons.com) ──────────────────────
 [triggers]
 crons = ["0 7 * * *"]  # 07:00 UTC daily

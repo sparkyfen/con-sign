@@ -103,6 +103,29 @@ describe('integration: device endpoint (pair-code flow)', () => {
     expect(r.status).toBe(404);
   });
 
+  it('rate-limits brute-force claim attempts (CLAIM_RL)', async () => {
+    const { ctx, roomId } = await setupRoom();
+    // Replace the always-pass stub with a deterministic one: third call fails.
+    let n = 0;
+    ctx.env.CLAIM_RL = {
+      limit: async () => ({ success: ++n < 3 }),
+    };
+
+    const first = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code: 'NOTACODE' }, // doesn't matter, RL hits before code lookup
+    });
+    expect(first.status).toBe(404); // bad code, RL passed
+    const second = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code: 'NOTACODE' },
+    });
+    expect(second.status).toBe(404);
+    const third = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, {
+      body: { code: 'NOTACODE' },
+    });
+    expect(third.status).toBe(429);
+    expect((third.body as { error: string }).error).toBe('claim_rate_limited');
+  });
+
   it('rejects reuse of a consumed pair code', async () => {
     const { ctx, roomId } = await setupRoom();
     await call(ctx, 'GET', '/api/device/sign.png', {

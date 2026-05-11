@@ -143,6 +143,7 @@ export interface TestBindings {
   DB: D1Database;
   SESSIONS: KVNamespace;
   UNLOCK_RL: { limit: (o: { key: string }) => Promise<{ success: boolean }> };
+  CLAIM_RL: { limit: (o: { key: string }) => Promise<{ success: boolean }> };
   ICS_FEED_URL: string;
   TURNSTILE_SITE_KEY: string;
   SESSION_HMAC: string;
@@ -156,6 +157,7 @@ export function createTestBindings(overrides: Partial<TestBindings> = {}): TestB
     DB: createD1(),
     SESSIONS: createKV(),
     UNLOCK_RL: createRateLimit(),
+    CLAIM_RL: createRateLimit(),
     ICS_FEED_URL: 'https://example.invalid/test.ics',
     TURNSTILE_SITE_KEY: 'test-site-key',
     SESSION_HMAC: 'test-hmac-secret-do-not-use-in-prod',

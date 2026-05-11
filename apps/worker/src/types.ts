@@ -5,6 +5,7 @@ export interface Bindings {
   DB: D1Database;
   SESSIONS: KVNamespace;
   UNLOCK_RL: RateLimit;
+  CLAIM_RL: RateLimit;
 
   // vars
   ICS_FEED_URL: string;

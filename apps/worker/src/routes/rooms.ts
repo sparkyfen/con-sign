@@ -407,7 +407,14 @@ roomRoutes.get('/:id/qr.png', requireUser, async (c) => {
 
 roomRoutes.post('/:id/devices/claim', requireUser, async (c) => {
   const roomId = c.req.param('id');
-  await requireAdmin(c, roomId);
+  const me = await requireAdmin(c, roomId);
+
+  // Per-user cap. Brute-forcing the 32^6 ≈ 10^9 pair-code keyspace would
+  // need millions of requests/sec; 30/min stops that cold while letting a
+  // legitimate admin retype a mistyped code.
+  const rl = await c.env.CLAIM_RL.limit({ key: `claim:${me.userId}` });
+  if (!rl.success) throw new HttpError(429, 'claim_rate_limited');
+
   const room = await getRoom(c.env.DB, roomId);
   if (!room) throw new HttpError(404, 'room_not_found');
 
