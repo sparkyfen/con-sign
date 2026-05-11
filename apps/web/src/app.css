@@ -11,18 +11,23 @@
 
 :root {
   --paper: #ffffff;
-  --ink: #111111;
-  --ink-75: #3d3d3d;
-  --ink-50: #757575;
-  --ink-25: #c2c2c2;
+  --ink: #1a1a1a;
+  --ink-75: #4a4a4a;
+  --ink-50: #666666;
+  --ink-25: #bfbfbf;
   --ink-10: #ececec;
 
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-eink: 0; /* Mockup uses sharp rectangles for panel chrome */
 
-  --font-serif: 'IBM Plex Serif', Georgia, serif;
+  /* Mockup picks Playfair Display for display headlines (splash hero,
+     section headings) and IBM Plex Mono for body, eyebrows, and labels.
+     IBM Plex Serif is reserved for in-app reading copy that may land
+     later. */
+  --font-display: 'Playfair Display', Georgia, serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: 'IBM Plex Serif', Georgia, serif;
 }
 
 *,
