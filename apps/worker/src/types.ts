@@ -6,6 +6,7 @@ export interface Bindings {
   SESSIONS: KVNamespace;
   UNLOCK_RL: RateLimit;
   CLAIM_RL: RateLimit;
+  AVATAR_RL: RateLimit;
 
   // vars
   ICS_FEED_URL: string;

@@ -12,6 +12,7 @@ import { roomRoutes } from './routes/rooms.js';
 import { visitorRoutes } from './routes/visitor.js';
 import { runIcsSync, runStaleDeviceCleanup } from './cron/ics-sync.js';
 import { csrfOriginCheck } from './auth/csrf.js';
+import { securityHeaders } from './auth/security-headers.js';
 
 export const app = new Hono<Env>();
 
@@ -36,6 +37,9 @@ app.onError((err, c) => {
  * specifically, not a generic 500. Cheap enough to hit from uptime
  * monitors at 1/min without worrying about D1 quota.
  */
+// Defense-in-depth response headers on every reply (HSTS, nosniff, etc).
+app.use('*', securityHeaders);
+
 // CSRF defense: every state-changing method must carry a same-host Origin
 // header. Mounted before any route so the check is unmissable.
 app.use('*', csrfOriginCheck);

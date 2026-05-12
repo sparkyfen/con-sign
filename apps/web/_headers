@@ -1,0 +1,14 @@
+/*
+  # Same defense-in-depth set as the Worker, plus CSP since this app
+  # actually ships HTML.
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+  # CSP: limit page resources to our own origin, Google Fonts (CSS + woff2
+  # served from fonts.googleapis.com / fonts.gstatic.com), and the API on
+  # the same origin via fetch. 'unsafe-inline' on style-src is required for
+  # SvelteKit's hydration styles; script-src stays strict. base-uri/object
+  # locked so nothing can re-anchor relative URLs or load <object>/<embed>.
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'

@@ -44,6 +44,17 @@ type = "ratelimit"
 namespace_id = "1002"
 simple = { limit = 30, period = 60 }
 
+# Per-IP cap on /api/avatar/tg/:id cache misses. Defends Bot API quota
+# from a scraper walking sequential ids. Hotel-NAT concern (one IP =
+# many users) doesn't bite here because legitimate viewers all hit the
+# same handful of cached avatars per room — the rate-limit only sees
+# the unique-id flood pattern. 60/60s is well above any real session.
+[[unsafe.bindings]]
+name = "AVATAR_RL"
+type = "ratelimit"
+namespace_id = "1003"
+simple = { limit = 60, period = 60 }
+
 # ─── Cron Trigger (daily ICS sync from furrycons.com) ──────────────────────
 [triggers]
 crons = ["0 7 * * *"]  # 07:00 UTC daily
