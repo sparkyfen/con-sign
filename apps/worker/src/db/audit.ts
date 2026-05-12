@@ -73,8 +73,15 @@ export async function recordAudit(db: D1Database, args: AuditWrite): Promise<voi
 /**
  * Cursor for keyset pagination. Encodes the (at, id) of the last row in
  * the current page so a follow-up query can resume strictly before it.
- * Base64 keeps the payload opaque-ish; not a security boundary (anyone
- * can decode it), just keeps clients from depending on the shape.
+ *
+ * Wire format: base64url (RFC 4648 §5) of the JSON. base64url avoids the
+ * `+`, `/`, and `=` characters from standard base64 — clients can drop
+ * the cursor into a URL query string without calling encodeURIComponent,
+ * and we don't lose padding to URL parsers that strip `=`.
+ *
+ * decodeCursor also accepts legacy standard-base64 cursors (single
+ * deploy with `+`/`/`/`=`) so any in-flight client doesn't 404 the
+ * moment we ship this; safe to remove once that's no longer a concern.
  */
 export interface AuditCursor {
   at: string;
@@ -82,17 +89,29 @@ export interface AuditCursor {
 }
 
 export function encodeCursor(c: AuditCursor): string {
-  return btoa(JSON.stringify(c));
+  return base64urlEncode(JSON.stringify(c));
 }
 
 export function decodeCursor(s: string): AuditCursor | null {
   try {
-    const v = JSON.parse(atob(s)) as Partial<AuditCursor>;
+    const v = JSON.parse(base64urlDecode(s)) as Partial<AuditCursor>;
     if (typeof v.at === 'string' && typeof v.id === 'string') return { at: v.at, id: v.id };
     return null;
   } catch {
     return null;
   }
+}
+
+function base64urlEncode(s: string): string {
+  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function base64urlDecode(s: string): string {
+  // Tolerate both base64url and legacy standard base64 input.
+  let normalized = s.replaceAll('-', '+').replaceAll('_', '/');
+  const pad = normalized.length % 4;
+  if (pad) normalized += '='.repeat(4 - pad);
+  return atob(normalized);
 }
 
 export interface AuditPage {
