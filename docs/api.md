@@ -285,9 +285,13 @@ Sets `revoked_at` on the device row; the panel's next poll renders the
 entirely (no API for that yet — open question if needed).
 Response: `{ ok: true }`.
 
-### `GET /api/device/sign.png?w=&h=&fmt=` *(device bearer)*
-Bearer is the panel's persistent UUID (firmware-generated). Three render
-branches selected automatically:
+### `GET /api/device/sign.png?w=&h=&fmt=&d=` *(device bearer)*
+Bearer is the panel's persistent UUID (firmware-generated). Supplied
+via `Authorization: Bearer <uuid>` (preferred — what BYOS firmware uses)
+**or** `?d=<uuid>` (fallback for cloud-mediated plugin services that
+can only configure a URL, like TRMNL's private-plugin field).
+
+Three render branches selected automatically:
 - No `device` row → unpaired panel with the rotating 6-char code
 - Row with `room_id` set → paired room sign
 - Row with `revoked_at` set → "PANEL UNPAIRED" screen

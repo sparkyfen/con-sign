@@ -39,6 +39,14 @@ describe('integration: device endpoint (pair-code flow)', () => {
     expect(r.status).toBe(401);
   });
 
+  it('accepts the bearer via ?d= query param (TRMNL cloud plugin shape)', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', `/api/device/sign.png?d=${DEVICE_A}`);
+    expect(r.status).toBe(200);
+    expect(r.res.headers.get('Content-Type')).toContain('svg');
+    expect(r.body).toContain('PAIRING CODE');
+  });
+
   it('serves an unpaired panel with a fresh pair code', async () => {
     const ctx = newCtx();
     const r = await call(ctx, 'GET', '/api/device/sign.png', {

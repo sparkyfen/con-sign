@@ -58,12 +58,20 @@ async function svgToResponse(svg: string, fmt: Format, width: number, height: nu
  *   - row.revoked_at set   → "panel unpaired" notice
  *
  * Width/height query params let firmware request the panel's native size.
+ *
+ * Bearer auth supports two transports:
+ *   1. `Authorization: Bearer <uuid>` header — preferred; what BYOS-style
+ *      firmware (writing direct HTTP) will use.
+ *   2. `?d=<uuid>` query param — fallback for cloud-mediated plugin
+ *      services (e.g. TRMNL's private-plugin URL field) that can only
+ *      configure a URL, not headers. The query param ends up in the
+ *      same places as the header (transit, edge cache key), so the
+ *      effective secret strength is identical.
  */
 deviceRoutes.get('/sign.png', async (c) => {
   const auth = c.req.header('Authorization');
-  const m = auth?.match(/^Bearer (.+)$/);
-  if (!m) throw new HttpError(401, 'missing_bearer');
-  const deviceId = m[1]!.trim();
+  const headerMatch = auth?.match(/^Bearer (.+)$/);
+  const deviceId = (headerMatch?.[1] ?? c.req.query('d') ?? '').trim();
   if (!deviceId) throw new HttpError(401, 'missing_bearer');
 
   const widthQ = c.req.query('w');
