@@ -32,9 +32,10 @@ choice, data model, auth, privacy tiers, and a v1/stretch breakdown.
 - **E-ink device auth:** firmware-generated UUID is the bearer; admin
   bootstraps via a 6-char OTP shown on the panel (see "Device pair-code
   bootstrap" below).
-- **E-ink hardware:** undecided (Seeed Studio board seen at dma.space). Plan
-  treats the device as a dumb HTTP client that fetches a server-rendered PNG —
-  works for ESP32, Pi, Inkplate, or a tablet kiosk.
+- **E-ink hardware:** first target is TRMNL (7.5", 800×480, ESP32-based).
+  See `docs/devices/` for per-device plans. The render pipeline stays
+  hardware-agnostic — device adapters live in
+  `apps/worker/src/routes/devices/<name>.ts`, not inside `routes/device.ts`.
 - **Cons list:** populated from the public
   [furrycons.com ICS feed](https://furrycons.com/calendar/furrycons.ics) via a
   daily Cron Trigger Worker — users *pick* a con, never type one in.

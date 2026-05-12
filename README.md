@@ -104,7 +104,8 @@ Origin enforcement, JWKS rotation, and an audit trail (see
 designed-as-accepted notes).
 
 Frontend (SvelteKit) is scaffolded and shipping pages: splash is live;
-`/login` is next. Deferred: PNG (vs. SVG) device render — only matters
-once e-ink hardware is picked.
+`/login` is next. First hardware target picked: TRMNL — see
+`docs/devices/trmnl/PLAN.md`. PNG/BMP render (PLAN #16) is now the gating
+backend work for hardware integration.
 
 See `PLAN.md`, `docs/api.md`, and `git log` for the latest.
