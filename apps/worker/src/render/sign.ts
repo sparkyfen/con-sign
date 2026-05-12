@@ -36,17 +36,23 @@ export function renderSignSvg(args: {
 }): string {
   const { roomName, conName, roommates, width, height, conDay } = args;
   const padding = 24;
-  // Header is taller now that it carries two lines (room + con).
-  const headerH = conName ? 88 : 64;
+  // Stacked header: large room name, then a smaller con line if present.
+  // Coords below assume baselines at fixed offsets so the two never overlap.
+  const roomNameFontSize = 40;
+  const roomNameBaselineY = padding + roomNameFontSize; // ~64
+  const conLineFontSize = 22;
+  const conLineGap = 8;
+  const conLineBaselineY = roomNameBaselineY + conLineGap + conLineFontSize; // ~94
+  const headerH = conName ? conLineBaselineY + 8 : roomNameBaselineY + 8;
   const rowH = Math.min(72, Math.floor((height - headerH - padding * 2) / Math.max(1, roommates.length)));
 
   // DAY counter only renders once the con has actually started. Before that
   // we'd show "DAY 0" or negative, which is more confusing than empty.
   const dayLabel =
     conDay != null && conDay > 0
-      ? `<g transform="translate(${width - padding}, ${padding})">
-          <text x="0" y="${Math.floor(headerH * 0.55)}" text-anchor="end"
-                font-size="${Math.floor(headerH * 0.4)}" font-weight="700"
+      ? `<g>
+          <text x="${width - padding}" y="${roomNameBaselineY}" text-anchor="end"
+                font-size="28" font-weight="700"
                 font-family="ui-sans-serif, system-ui, sans-serif" fill="black">
             DAY ${String(conDay).padStart(2, '0')}
           </text>
@@ -54,12 +60,10 @@ export function renderSignSvg(args: {
       : '';
 
   const conLine = conName
-    ? `<g transform="translate(${padding}, ${padding + 48})">
-        <text x="0" y="0" font-size="22"
-              font-family="ui-sans-serif, system-ui, sans-serif" font-weight="400" fill="#444">
-          ${escape(conName)}
-        </text>
-      </g>`
+    ? `<text x="${padding}" y="${conLineBaselineY}" font-size="${conLineFontSize}"
+            font-family="ui-sans-serif, system-ui, sans-serif" font-weight="400" fill="#555">
+        ${escape(conName)}
+      </text>`
     : '';
 
   const rows = roommates
@@ -80,12 +84,10 @@ export function renderSignSvg(args: {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="white"/>
-  <g transform="translate(${padding}, ${padding})">
-    <text x="0" y="40" font-size="${Math.floor(headerH * 0.45)}"
-          font-family="ui-sans-serif, system-ui, sans-serif" font-weight="700" fill="black">
-      ${escape(roomName)}
-    </text>
-  </g>
+  <text x="${padding}" y="${roomNameBaselineY}" font-size="${roomNameFontSize}"
+        font-family="ui-sans-serif, system-ui, sans-serif" font-weight="700" fill="black">
+    ${escape(roomName)}
+  </text>
   ${conLine}
   ${dayLabel}
   <line x1="${padding}" y1="${headerH + padding / 2}" x2="${width - padding}" y2="${headerH + padding / 2}"
