@@ -26,5 +26,14 @@ export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 export const auditListSchema = z.object({
   entries: z.array(auditEntrySchema),
+  /** Pass back as `?cursor=<string>` to fetch the next page. null = last page. */
+  nextCursor: z.string().nullable(),
 });
 export type AuditList = z.infer<typeof auditListSchema>;
+
+/** Query params for both audit listing endpoints. */
+export const auditQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+export type AuditQuery = z.infer<typeof auditQuerySchema>;

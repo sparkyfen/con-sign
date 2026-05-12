@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types.js';
 import { requireUser } from '../auth/middleware.js';
-import { listAuditForUser, type AuditRow } from '../db/audit.js';
-import type { AuditEntry, AuditList } from '@con-sign/shared';
+import { decodeCursor, listAuditForUser, type AuditRow } from '../db/audit.js';
+import { auditQuerySchema, type AuditEntry, type AuditList } from '@con-sign/shared';
 
 export const meRoutes = new Hono<Env>();
 
@@ -22,7 +22,9 @@ const rowToEntry = (r: AuditRow): AuditEntry => ({
 // every room they're in. Useful for "did I really change this last week?"
 // and for cross-room recall on power users.
 meRoutes.get('/audit', requireUser, async (c) => {
-  const rows = await listAuditForUser(c.env.DB, c.get('userId')!);
-  const body: AuditList = { entries: rows.map(rowToEntry) };
+  const q = auditQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const cursor = q.cursor ? decodeCursor(q.cursor) : null;
+  const page = await listAuditForUser(c.env.DB, c.get('userId')!, { limit: q.limit, cursor });
+  const body: AuditList = { entries: page.rows.map(rowToEntry), nextCursor: page.nextCursor };
   return c.json(body);
 });

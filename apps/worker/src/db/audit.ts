@@ -70,34 +70,90 @@ export async function recordAudit(db: D1Database, args: AuditWrite): Promise<voi
   }
 }
 
+/**
+ * Cursor for keyset pagination. Encodes the (at, id) of the last row in
+ * the current page so a follow-up query can resume strictly before it.
+ * Base64 keeps the payload opaque-ish; not a security boundary (anyone
+ * can decode it), just keeps clients from depending on the shape.
+ */
+export interface AuditCursor {
+  at: string;
+  id: string;
+}
+
+export function encodeCursor(c: AuditCursor): string {
+  return btoa(JSON.stringify(c));
+}
+
+export function decodeCursor(s: string): AuditCursor | null {
+  try {
+    const v = JSON.parse(atob(s)) as Partial<AuditCursor>;
+    if (typeof v.at === 'string' && typeof v.id === 'string') return { at: v.at, id: v.id };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export interface AuditPage {
+  rows: AuditRow[];
+  nextCursor: string | null;
+}
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
+/**
+ * Paginate the audit log keyset-style. Ordering is `(at DESC, id DESC)`
+ * so ties on the millisecond (D1 datetime('now') has second precision)
+ * still produce a total order via `id`. The cursor encodes both columns;
+ * the WHERE clause asks for strictly-older rows.
+ *
+ * Returns `nextCursor: null` when the page is the last one (fewer than
+ * `limit` rows came back, or the next query would be empty).
+ */
+async function listAuditPage(
+  db: D1Database,
+  filterColumn: 'room_id' | 'actor_user_id',
+  filterValue: string,
+  limit: number,
+  cursor: AuditCursor | null,
+): Promise<AuditPage> {
+  const lim = Math.min(MAX_LIMIT, Math.max(1, limit));
+  const sql = cursor
+    ? `SELECT * FROM audit_log
+        WHERE ${filterColumn} = ?
+          AND (at < ? OR (at = ? AND id < ?))
+        ORDER BY at DESC, id DESC
+        LIMIT ?`
+    : `SELECT * FROM audit_log
+        WHERE ${filterColumn} = ?
+        ORDER BY at DESC, id DESC
+        LIMIT ?`;
+  const stmt = cursor
+    ? db.prepare(sql).bind(filterValue, cursor.at, cursor.at, cursor.id, lim)
+    : db.prepare(sql).bind(filterValue, lim);
+  const result = await stmt.all<AuditRow>();
+  const rows = result.results ?? [];
+  const nextCursor =
+    rows.length === lim
+      ? encodeCursor({ at: rows[rows.length - 1]!.at, id: rows[rows.length - 1]!.id })
+      : null;
+  return { rows, nextCursor };
+}
+
 export async function listAuditForRoom(
   db: D1Database,
   roomId: string,
-  limit = 100,
-): Promise<AuditRow[]> {
-  const result = await db
-    .prepare(
-      `SELECT * FROM audit_log
-        WHERE room_id = ?
-        ORDER BY at DESC LIMIT ?`,
-    )
-    .bind(roomId, limit)
-    .all<AuditRow>();
-  return result.results ?? [];
+  opts: { limit?: number | undefined; cursor?: AuditCursor | null } = {},
+): Promise<AuditPage> {
+  return listAuditPage(db, 'room_id', roomId, opts.limit ?? DEFAULT_LIMIT, opts.cursor ?? null);
 }
 
 export async function listAuditForUser(
   db: D1Database,
   userId: string,
-  limit = 100,
-): Promise<AuditRow[]> {
-  const result = await db
-    .prepare(
-      `SELECT * FROM audit_log
-        WHERE actor_user_id = ?
-        ORDER BY at DESC LIMIT ?`,
-    )
-    .bind(userId, limit)
-    .all<AuditRow>();
-  return result.results ?? [];
+  opts: { limit?: number | undefined; cursor?: AuditCursor | null } = {},
+): Promise<AuditPage> {
+  return listAuditPage(db, 'actor_user_id', userId, opts.limit ?? DEFAULT_LIMIT, opts.cursor ?? null);
 }

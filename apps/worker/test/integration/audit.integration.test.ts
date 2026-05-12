@@ -132,6 +132,59 @@ describe('integration: audit log', () => {
     expect(entries.filter((e) => e.action === 'room.create')).toHaveLength(2);
   });
 
+  it('paginates room audit via cursor (limit + nextCursor)', async () => {
+    const ctx = newCtx();
+    const conId = await seedCon(ctx);
+    await loginAs(ctx, ADMIN);
+    const r = (await call(ctx, 'POST', '/api/rooms', { body: { conId, name: 'R' } }))
+      .body as RoomCreated;
+
+    // Pump 25 rename actions so we have a healthy dataset.
+    for (let i = 0; i < 25; i++) {
+      await call(ctx, 'PATCH', `/api/rooms/${r.room.id}`, { body: { name: `R-${i}` } });
+    }
+
+    const page1 = await call(ctx, 'GET', `/api/rooms/${r.room.id}/audit?limit=10`);
+    expect(page1.status).toBe(200);
+    const b1 = page1.body as { entries: AuditEntryShape[]; nextCursor: string | null };
+    expect(b1.entries).toHaveLength(10);
+    expect(b1.nextCursor).toBeTruthy();
+
+    const page2 = await call(
+      ctx,
+      'GET',
+      `/api/rooms/${r.room.id}/audit?limit=10&cursor=${encodeURIComponent(b1.nextCursor!)}`,
+    );
+    const b2 = page2.body as { entries: AuditEntryShape[]; nextCursor: string | null };
+    expect(b2.entries).toHaveLength(10);
+    // No overlap between the two pages.
+    const ids1 = new Set(b1.entries.map((e) => (e as unknown as { id: string }).id));
+    for (const e of b2.entries) {
+      expect(ids1.has((e as unknown as { id: string }).id)).toBe(false);
+    }
+
+    // Last page (25 renames + 1 create = 26 rows) — should be 6 entries and
+    // nextCursor=null.
+    const page3 = await call(
+      ctx,
+      'GET',
+      `/api/rooms/${r.room.id}/audit?limit=10&cursor=${encodeURIComponent(b2.nextCursor!)}`,
+    );
+    const b3 = page3.body as { entries: AuditEntryShape[]; nextCursor: string | null };
+    expect(b3.entries.length).toBeLessThan(10);
+    expect(b3.nextCursor).toBeNull();
+  });
+
+  it('rejects an invalid limit', async () => {
+    const ctx = newCtx();
+    const conId = await seedCon(ctx);
+    await loginAs(ctx, ADMIN);
+    const r = (await call(ctx, 'POST', '/api/rooms', { body: { conId, name: 'R' } }))
+      .body as RoomCreated;
+    const bad = await call(ctx, 'GET', `/api/rooms/${r.room.id}/audit?limit=999`);
+    expect(bad.status).toBe(400);
+  });
+
   it('audit write failures do not break the underlying request', async () => {
     // Sabotage the audit_log table; room.create should still succeed.
     const ctx = newCtx();

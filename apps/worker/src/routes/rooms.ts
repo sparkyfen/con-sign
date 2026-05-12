@@ -46,8 +46,8 @@ import {
   updateRoommateProfile,
 } from '../db/queries.js';
 import { consumePairCode } from '../auth/pair-code.js';
-import { listAuditForRoom, recordAudit, type AuditRow } from '../db/audit.js';
-import type { AuditEntry, AuditList } from '@con-sign/shared';
+import { decodeCursor, listAuditForRoom, recordAudit, type AuditRow } from '../db/audit.js';
+import { auditQuerySchema, type AuditEntry, type AuditList } from '@con-sign/shared';
 
 export const roomRoutes = new Hono<Env>();
 
@@ -229,8 +229,10 @@ roomRoutes.get('/:id/roommates/:rid', requireUser, async (c) => {
 roomRoutes.get('/:id/audit', requireUser, async (c) => {
   const roomId = c.req.param('id');
   await requireRoommate(c, roomId);
-  const rows = await listAuditForRoom(c.env.DB, roomId);
-  const body: AuditList = { entries: rows.map(rowToEntry) };
+  const q = auditQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const cursor = q.cursor ? decodeCursor(q.cursor) : null;
+  const page = await listAuditForRoom(c.env.DB, roomId, { limit: q.limit, cursor });
+  const body: AuditList = { entries: page.rows.map(rowToEntry), nextCursor: page.nextCursor };
   return c.json(body);
 });
 

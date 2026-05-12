@@ -309,10 +309,15 @@ distinguish a misconfigured binding from a Worker outage.
 
 ## Audit log
 
-### `GET /api/rooms/:id/audit` *(member required)*
-Every audit entry for the room (newest first, capped at 100). Member-readable
-on purpose — non-admin members deserve to know who let in / removed
-roommates and managed shared resources. Strangers get `403 not_a_member`.
+### `GET /api/rooms/:id/audit?cursor=…&limit=…` *(member required)*
+Audit entries for the room, newest first. Member-readable on purpose —
+non-admin members deserve to know who let in / removed roommates and
+managed shared resources. Strangers get `403 not_a_member`.
+
+Query:
+- `limit` (1..100, default 50)
+- `cursor` (opaque, returned from a previous page's `nextCursor`)
+
 Response: `AuditList` —
 ```json
 {
@@ -324,14 +329,21 @@ Response: `AuditList` —
     "targetId": "device-uuid",
     "metadata": { ... },     // action-specific, may be null
     "at": "ISO8601"
-  }]
+  }],
+  "nextCursor": "ZXlKaGRD..."   // null on the last page
 }
 ```
 
-### `GET /api/me/audit` *(auth required)*
-Same shape, but filtered to actions the caller themselves performed,
-across every room they're in. Useful for "did I really change this last
-week?" and for cross-room recall on power users.
+Pagination is keyset-style on `(at DESC, id DESC)`; the cursor encodes
+both columns so duplicate timestamps don't break ordering. To page
+through everything: keep calling with `cursor=<nextCursor>` until
+`nextCursor` is null.
+
+### `GET /api/me/audit?cursor=…&limit=…` *(auth required)*
+Same shape and pagination semantics as the room endpoint, filtered to
+actions the caller themselves performed across every room they're in.
+Useful for "did I really change this last week?" and for cross-room
+recall on power users.
 
 Action vocabulary (more may be added without API breakage):
 `room.create`, `room.rename`, `room.invite_created`, `room.member_joined`,
