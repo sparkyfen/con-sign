@@ -123,8 +123,15 @@ Response: `UnlockResponse` —
 ## Avatars
 
 ### `GET /api/avatar/tg/:tgUserId`
-Stream-proxied Telegram user avatar via the Bot API. Cached `private` for
-1 hour. Use as `<img src="/api/avatar/tg/12345">` — no JSON wrapper.
+Stream-proxied Telegram user avatar via the Bot API. Use as
+`<img src="/api/avatar/tg/12345">` — no JSON wrapper.
+
+Edge-cached via `caches.default` (1h TTL), so the Bot API only sees the
+first request per ID. Cache misses are gated by a per-IP rate limit
+(60 / 60s) — a scraper walking sequential IDs gets `429 avatar_rate_limited`
+once it busts the budget. Hotel-NAT shared IPs aren't a concern here:
+legitimate viewers all hit the cache, only the unique-ID flood pattern
+exercises the limit.
 
 ---
 
