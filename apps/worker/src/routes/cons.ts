@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
 import { conSearchQuerySchema, type Con } from '@con-sign/shared';
 import type { Env } from '../types.js';
-import { runIcsSync } from '../cron/ics-sync.js';
-import { requireUser } from '../auth/middleware.js';
 
 export const conRoutes = new Hono<Env>();
 
@@ -43,13 +41,4 @@ conRoutes.get('/', async (c) => {
 
   const result = await stmt.all<ConRow>();
   return c.json({ cons: (result.results ?? []).map(rowToCon) });
-});
-
-/**
- * Manual ICS resync. Authenticated — no IP- or session-based rate limit on
- * the route; the upstream feed is fine to hit a few times a day.
- */
-conRoutes.post('/sync', requireUser, async (c) => {
-  const result = await runIcsSync(c.env);
-  return c.json(result);
 });

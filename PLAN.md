@@ -221,7 +221,6 @@ POST   /api/r/:slug/unlock            → { unlocked_roommate_ids[] }
 
 # Cons (read-only; ICS-synced)
 GET    /api/cons?q=...                → typeahead search
-POST   /api/cons/sync                 (manual ICS resync, requireUser)
 
 # Avatars
 GET    /api/avatar/tg/:tgUserId       (Bot API stream-proxy)

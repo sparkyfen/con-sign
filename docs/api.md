@@ -87,11 +87,6 @@ Typeahead search. Query is matched against name (case-insensitive substring).
 Without `q`, returns the next upcoming cons by `start_date`.
 Response: `{ cons: Con[] }`.
 
-### `POST /api/cons/sync` *(auth required)*
-Manual ICS resync. Useful during testing; the daily cron at 07:00 UTC handles
-the normal case.
-Response: `{ ingested: number }`.
-
 ---
 
 ## Visitor (no login required)
