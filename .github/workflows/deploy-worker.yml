@@ -15,6 +15,7 @@ on:
     paths:
       - 'apps/worker/**'
       - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-worker.yml'
   workflow_dispatch:
 

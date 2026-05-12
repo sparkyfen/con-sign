@@ -15,11 +15,13 @@ on:
     paths:
       - 'apps/web/**'
       - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-web.yml'
   pull_request:
     paths:
       - 'apps/web/**'
       - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
