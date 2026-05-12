@@ -112,9 +112,9 @@ deviceRoutes.get('/sign.png', async (c) => {
       const room = await getRoom(c.env.DB, device.room_id!);
       if (!room) throw new HttpError(404, 'room_not_found');
 
-      const conRow = await c.env.DB.prepare('SELECT start_date FROM con WHERE id = ?')
+      const conRow = await c.env.DB.prepare('SELECT name, start_date FROM con WHERE id = ?')
         .bind(room.con_id)
-        .first<{ start_date: string | null }>();
+        .first<{ name: string | null; start_date: string | null }>();
 
       const rows = await listRoommatesForRoom(c.env.DB, room.id);
       const projected = await Promise.all(
@@ -127,6 +127,7 @@ deviceRoutes.get('/sign.png', async (c) => {
 
       svg = renderSignSvg({
         roomName: room.name,
+        conName: conRow?.name ?? null,
         roommates: projected,
         width,
         height,

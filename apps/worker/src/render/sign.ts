@@ -28,26 +28,39 @@ export function computeConDay(startDate: string | null, now: Date = new Date()):
  */
 export function renderSignSvg(args: {
   roomName: string;
+  conName?: string | null;
   roommates: ProjectedRoommate[];
   width: number;
   height: number;
   conDay?: number | null;
 }): string {
-  const { roomName, roommates, width, height, conDay } = args;
+  const { roomName, conName, roommates, width, height, conDay } = args;
   const padding = 24;
-  const headerH = 64;
+  // Header is taller now that it carries two lines (room + con).
+  const headerH = conName ? 88 : 64;
   const rowH = Math.min(72, Math.floor((height - headerH - padding * 2) / Math.max(1, roommates.length)));
 
+  // DAY counter only renders once the con has actually started. Before that
+  // we'd show "DAY 0" or negative, which is more confusing than empty.
   const dayLabel =
     conDay != null && conDay > 0
       ? `<g transform="translate(${width - padding}, ${padding})">
-          <text x="0" y="${headerH * 0.7}" text-anchor="end"
-                font-size="${Math.floor(headerH * 0.45)}" font-weight="700"
+          <text x="0" y="${Math.floor(headerH * 0.55)}" text-anchor="end"
+                font-size="${Math.floor(headerH * 0.4)}" font-weight="700"
                 font-family="ui-sans-serif, system-ui, sans-serif" fill="black">
             DAY ${String(conDay).padStart(2, '0')}
           </text>
         </g>`
       : '';
+
+  const conLine = conName
+    ? `<g transform="translate(${padding}, ${padding + 48})">
+        <text x="0" y="0" font-size="22"
+              font-family="ui-sans-serif, system-ui, sans-serif" font-weight="400" fill="#444">
+          ${escape(conName)}
+        </text>
+      </g>`
+    : '';
 
   const rows = roommates
     .map((r, i) => {
@@ -68,11 +81,12 @@ export function renderSignSvg(args: {
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="white"/>
   <g transform="translate(${padding}, ${padding})">
-    <text x="0" y="${headerH * 0.7}" font-size="${Math.floor(headerH * 0.6)}"
+    <text x="0" y="40" font-size="${Math.floor(headerH * 0.45)}"
           font-family="ui-sans-serif, system-ui, sans-serif" font-weight="700" fill="black">
       ${escape(roomName)}
     </text>
   </g>
+  ${conLine}
   ${dayLabel}
   <line x1="${padding}" y1="${headerH + padding / 2}" x2="${width - padding}" y2="${headerH + padding / 2}"
         stroke="black" stroke-width="2"/>
