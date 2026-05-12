@@ -39,13 +39,20 @@ export async function renderPng(
   await ready();
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width', value: width },
+    // `font` is a tagged union: CustomFontsOptions (fontBuffers, no
+    // system access) vs SystemFontsOptions (loadSystemFonts/Files).
+    // We're in custom-only mode — Workers have no system font dir
+    // to load from anyway.
     font: {
       fontBuffers: FONT_BUFFERS,
-      // Fall back to Plex Mono for any family the SVG asks for that we
-      // don't have bundled (e.g. ui-serif). Resvg picks this name from
-      // the font table of the buffers above.
       defaultFontFamily: 'IBM Plex Mono',
-      loadSystemFonts: false,
+      // The SVGs we render use `monospace` and `serif` as generic
+      // fallbacks alongside the IBM Plex names. Map both to our
+      // bundled font so resvg doesn't silently drop glyphs when it
+      // can't resolve `monospace` to anything system-installed.
+      monospaceFamily: 'IBM Plex Mono',
+      serifFamily: 'IBM Plex Mono',
+      sansSerifFamily: 'IBM Plex Mono',
     },
   });
   return resvg.render().asPng();
