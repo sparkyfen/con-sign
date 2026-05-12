@@ -11,6 +11,13 @@ type = "CompiledWasm"
 globs = ["**/*.wasm"]
 fallthrough = true
 
+# Bundle .ttf font files as raw bytes so resvg can rasterize text. Workers
+# have no system fonts; without these, text glyphs render invisible.
+[[rules]]
+type = "Data"
+globs = ["**/*.ttf"]
+fallthrough = true
+
 # Apex (`cons.social`) is owned by the Pages project (`con-sign`). The
 # Worker only handles the API surface via this route.
 routes = [
