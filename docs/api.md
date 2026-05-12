@@ -285,14 +285,20 @@ Sets `revoked_at` on the device row; the panel's next poll renders the
 entirely (no API for that yet — open question if needed).
 Response: `{ ok: true }`.
 
-### `GET /api/device/sign.png?w=&h=` *(device bearer)*
-Bearer is the panel's persistent UUID (firmware-generated). Returns SVG.
-Three render branches selected automatically:
+### `GET /api/device/sign.png?w=&h=&fmt=` *(device bearer)*
+Bearer is the panel's persistent UUID (firmware-generated). Three render
+branches selected automatically:
 - No `device` row → unpaired panel with the rotating 6-char code
 - Row with `room_id` set → paired room sign
 - Row with `revoked_at` set → "PANEL UNPAIRED" screen
 
-`w` / `h` query params override the default 800×480 (clamped 100..4096).
+Query:
+- `w` / `h` — panel size, default 800×480, clamped 100..4096.
+- `fmt` — `svg` (default) or `png`. PNG is rendered server-side via
+  `resvg-wasm`; the PNG path is edge-cached for 60s. Use `png` for
+  devices that can't rasterize SVG on-device (TRMNL and most ESP32
+  firmwares); keep `svg` for Pi-class devices that prefer to handle
+  rasterization themselves.
 
 ---
 

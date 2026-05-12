@@ -20,12 +20,32 @@ import {
 
 export const deviceRoutes = new Hono<Env>();
 
+type Format = 'svg' | 'png';
+
 const SVG_HEADERS = {
   'Content-Type': 'image/svg+xml; charset=utf-8',
   // Short cache: panels self-throttle their refresh rate, but the unpaired
   // code rotates every 5 min and we don't want a CDN to pin the old one.
   'Cache-Control': 'no-store',
 };
+
+const PNG_HEADERS = {
+  'Content-Type': 'image/png',
+  // Devices poll every 5-15 min; 60s lets the edge serve the same render
+  // to a TRMNL cloud fanout without hitting our raster CPU each time.
+  'Cache-Control': 'public, max-age=60',
+};
+
+async function svgToResponse(svg: string, fmt: Format, width: number, height: number): Promise<Response> {
+  if (fmt === 'svg') return new Response(svg, { headers: SVG_HEADERS });
+  // Dynamic import: the resvg-wasm module pulls a .wasm binding which only
+  // resolves under workerd (wrangler's CompiledWasm rule). Keeping the
+  // import lazy means SVG-only callers — and our Node-based vitest suite —
+  // never touch the wasm machinery.
+  const { renderPng } = await import('../render/raster.js');
+  const png = await renderPng(svg, width, height);
+  return new Response(png, { headers: PNG_HEADERS });
+}
 
 /**
  * GET /api/device/sign.png
@@ -50,48 +70,66 @@ deviceRoutes.get('/sign.png', async (c) => {
   const heightQ = c.req.query('h');
   const width = widthQ ? Math.max(100, Math.min(4096, Number(widthQ))) : 800;
   const height = heightQ ? Math.max(100, Math.min(4096, Number(heightQ))) : 480;
+  const fmt: Format = c.req.query('fmt') === 'png' ? 'png' : 'svg';
+
+  // Edge cache only the PNG path. SVG paths are cheap and the unpaired
+  // branch's content rotates every 5 min (KV-driven), so caching SVG
+  // there would just risk serving the prior code. Cache is gated by
+  // both fmt=png and `caches.default` being defined — vitest/Node has
+  // no Workers `caches` global, and bypassing it in that case lets the
+  // SVG-flow tests run without stubbing the runtime.
+  const cacheKey = new Request(c.req.url, { method: 'GET' });
+  const cache = fmt === 'png' && typeof caches !== 'undefined' ? caches.default : null;
+  if (cache) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+  }
 
   const device = await getDevice(c.env.DB, deviceId);
 
+  let svg: string;
   // Unpaired (no row, or row exists but neither paired nor revoked — the
   // re-pair-after-revoke transition leaves a row with both fields cleared).
   if (!device || (!device.room_id && !device.revoked_at)) {
     const code = await getOrCreatePairCode(c.env.SESSIONS, deviceId);
-    return new Response(renderUnpairedSvg({ pairCode: code, width, height }), {
-      headers: SVG_HEADERS,
-    });
+    svg = renderUnpairedSvg({ pairCode: code, width, height });
+  } else {
+    // Touch last_seen for any device the server already knows about.
+    await touchDevice(c.env.DB, deviceId);
+
+    if (device.revoked_at) {
+      svg = renderRevokedSvg({ width, height });
+    } else {
+      // Paired — fetch the room + roommates and render at GUEST tier.
+      const room = await getRoom(c.env.DB, device.room_id!);
+      if (!room) throw new HttpError(404, 'room_not_found');
+
+      const conRow = await c.env.DB.prepare('SELECT start_date FROM con WHERE id = ?')
+        .bind(room.con_id)
+        .first<{ start_date: string | null }>();
+
+      const rows = await listRoommatesForRoom(c.env.DB, room.id);
+      const projected = await Promise.all(
+        rows.map(async ({ row, avatarUrl }) => {
+          const visibility = await getVisibility(c.env.DB, row.id);
+          const r = roommateRowToApi(row, avatarUrl);
+          return projectRoommate(r, visibility, []);
+        }),
+      );
+
+      svg = renderSignSvg({
+        roomName: room.name,
+        roommates: projected,
+        width,
+        height,
+        conDay: computeConDay(conRow?.start_date ?? null),
+      });
+    }
   }
 
-  // Touch last_seen for any device the server already knows about.
-  await touchDevice(c.env.DB, deviceId);
-
-  if (device.revoked_at) {
-    return new Response(renderRevokedSvg({ width, height }), { headers: SVG_HEADERS });
+  const response = await svgToResponse(svg, fmt, width, height);
+  if (cache) {
+    c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
   }
-
-  // Paired — fetch the room + roommates and render at GUEST tier.
-  const room = await getRoom(c.env.DB, device.room_id!);
-  if (!room) throw new HttpError(404, 'room_not_found');
-
-  const conRow = await c.env.DB.prepare('SELECT start_date FROM con WHERE id = ?')
-    .bind(room.con_id)
-    .first<{ start_date: string | null }>();
-
-  const rows = await listRoommatesForRoom(c.env.DB, room.id);
-  const projected = await Promise.all(
-    rows.map(async ({ row, avatarUrl }) => {
-      const visibility = await getVisibility(c.env.DB, row.id);
-      const r = roommateRowToApi(row, avatarUrl);
-      return projectRoommate(r, visibility, []);
-    }),
-  );
-
-  const svg = renderSignSvg({
-    roomName: room.name,
-    roommates: projected,
-    width,
-    height,
-    conDay: computeConDay(conRow?.start_date ?? null),
-  });
-  return new Response(svg, { headers: SVG_HEADERS });
+  return response;
 });

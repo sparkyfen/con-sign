@@ -105,7 +105,9 @@ designed-as-accepted notes).
 
 Frontend (SvelteKit) is scaffolded and shipping pages: splash is live;
 `/login` is next. First hardware target picked: TRMNL — see
-`docs/devices/trmnl/PLAN.md`. PNG/BMP render (PLAN #16) is now the gating
-backend work for hardware integration.
+`docs/devices/trmnl/PLAN.md`. Server-side PNG render is now live
+(`?fmt=png` on the device endpoint, rasterized via `resvg-wasm` and
+edge-cached for 60 s); the TRMNL adapter endpoints (Mode B BYOS) are
+the next backend step.
 
 See `PLAN.md`, `docs/api.md`, and `git log` for the latest.

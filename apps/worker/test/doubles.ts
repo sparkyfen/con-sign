@@ -79,7 +79,12 @@ export function createD1(): D1Database {
   const sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
   const migrationsDir = join(process.cwd(), 'src/db/migrations');
-  for (const file of ['0001_init.sql', '0002_devices.sql', '0003_audit_log.sql']) {
+  for (const file of [
+    '0001_init.sql',
+    '0002_devices.sql',
+    '0003_audit_log.sql',
+    '0004_device_mac.sql',
+  ]) {
     sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
   }
   // SQLite reserves `user` and `con` — check our migration uses them as

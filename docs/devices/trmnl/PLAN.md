@@ -97,19 +97,22 @@ Four endpoints; con-sign owns each.
 
 ## Image format
 
-Today's render is SVG via `apps/worker/src/render/sign.ts`. TRMNL
-expects PNG or 1-bit BMP at 800×480. This is task **#16** from
-PLAN.md, now unblocked.
+**PNG render is live.** `GET /api/device/sign.png?fmt=png` rasterizes
+the existing SVG output via `@resvg/resvg-wasm` and returns
+`image/png`. Edge-cached for 60 s via `caches.default`. The SVG path
+remains the default for Pi-class devices that want to rasterize
+themselves.
 
-Two-step pipeline:
+Pipeline:
 
-1. Keep `renderSignSvg` as the layout source of truth.
-2. Rasterize SVG → PNG via `@resvg/resvg-wasm` (Workers-compatible).
-3. If TRMNL's firmware version needs BMP1, encode PNG → 1-bit BMP
-   with a ~20-line custom encoder. Newer firmware accepts PNG
-   directly — check the deployed version before adding BMP.
+1. `renderSignSvg` stays the layout source of truth.
+2. `apps/worker/src/render/raster.ts` calls `Resvg(svg, ...).render().asPng()`.
+3. If TRMNL's firmware turns out to need 1-bit BMP1 instead of PNG,
+   a ~20-line PNG → BMP1 encoder bolts on top of the same SVG. Verify
+   firmware version against your TRMNL before doing this — newer
+   builds accept PNG directly.
 
-Both Mode A and Mode B need this; share the code.
+Both Mode A and Mode B use the same `?fmt=png` endpoint.
 
 ## Schema changes
 

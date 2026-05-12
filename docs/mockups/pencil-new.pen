@@ -2101,153 +2101,22 @@
                 "fill": "$--ink"
               },
               "layout": "vertical",
-              "gap": 4,
               "padding": 8,
               "children": [
                 {
-                  "type": "frame",
-                  "id": "dKBwl",
-                  "name": "qrG1",
+                  "type": "path",
+                  "id": "E2VCgt",
+                  "name": "qrCode",
+                  "geometry": "M0 0h7v1h-7z m9 0h1v1h-1z m2 0h1v1h-1z m3 0h7v1h-7z m-14 1h1v1h-1z m6 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m6 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m4 0h2v1h-2z m4 0h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m3 0h1v1h-1z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m-20 1h1v1h-1z m6 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m6 0h1v1h-1z m-20 1h7v1h-7z m8 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h7v1h-7z m-5 1h2v1h-2z m-9 1h1v1h-1z m2 0h1v1h-1z m3 0h2v1h-2z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m3 0h2v1h-2z m3 0h1v1h-1z m-18 1h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m-20 1h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m3 0h1v1h-1z m-17 1h2v1h-2z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z m2 0h2v1h-2z m-17 1h1v1h-1z m3 0h2v1h-2z m3 0h1v1h-1z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m4 0h1v1h-1z m-12 1h1v1h-1z m2 0h1v1h-1z m3 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m-19 1h7v1h-7z m9 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m-18 1h1v1h-1z m6 0h1v1h-1z m2 0h1v1h-1z m4 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m3 0h2v1h-2z m5 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m-19 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m2 0h1v1h-1z m3 0h2v1h-2z m4 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m3 0h1v1h-1z m-20 1h1v1h-1z m6 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m-18 1h7v1h-7z m10 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z",
+                  "viewBox": [
+                    0,
+                    0,
+                    21,
+                    21
+                  ],
+                  "fill": "$--ink",
                   "width": "fill_container",
-                  "height": 30,
-                  "gap": 4,
-                  "children": [
-                    {
-                      "type": "rectangle",
-                      "id": "P0owmn",
-                      "fill": "$--ink",
-                      "width": 30,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "aSGOH",
-                      "fill": "$--paper",
-                      "width": 14,
-                      "height": 30,
-                      "stroke": {
-                        "align": "inside",
-                        "thickness": 1,
-                        "fill": "$--ink"
-                      }
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "iCeLm",
-                      "fill": "$--ink",
-                      "width": 30,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "Dwbf6",
-                      "fill": "$--paper",
-                      "width": 12,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "se9XR",
-                      "fill": "$--ink",
-                      "width": 18,
-                      "height": 30
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "U2nfz",
-                  "name": "qrG2",
-                  "width": "fill_container",
-                  "height": 30,
-                  "gap": 4,
-                  "children": [
-                    {
-                      "type": "rectangle",
-                      "id": "xC0J2",
-                      "fill": "$--ink",
-                      "width": 14,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "bH9V9",
-                      "fill": "$--paper",
-                      "width": 22,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "C9m3H",
-                      "fill": "$--ink",
-                      "width": 28,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "h9rV4",
-                      "fill": "$--paper",
-                      "width": 30,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "Y4ruFq",
-                      "fill": "$--ink",
-                      "width": 12,
-                      "height": 30
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "VmcQV",
-                  "name": "qrG3",
-                  "width": "fill_container",
-                  "height": 30,
-                  "gap": 4,
-                  "children": [
-                    {
-                      "type": "rectangle",
-                      "id": "M08u9y",
-                      "fill": "$--ink",
-                      "width": 30,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "acYS5",
-                      "fill": "$--paper",
-                      "width": 18,
-                      "height": 30,
-                      "stroke": {
-                        "align": "inside",
-                        "thickness": 1,
-                        "fill": "$--ink"
-                      }
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "V1jygw",
-                      "fill": "$--ink",
-                      "width": 22,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "qjt9q",
-                      "fill": "$--paper",
-                      "width": 12,
-                      "height": 30
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "PTriI",
-                      "fill": "$--ink",
-                      "width": 16,
-                      "height": 30
-                    }
-                  ]
+                  "height": "fill_container"
                 }
               ]
             },
@@ -10769,13 +10638,19 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon_font",
-                              "id": "tXkTd",
+                              "type": "path",
+                              "id": "leVK3",
+                              "name": "qrCode",
+                              "geometry": "M0 0h7v1h-7z m9 0h1v1h-1z m2 0h1v1h-1z m3 0h7v1h-7z m-14 1h1v1h-1z m6 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m6 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m4 0h2v1h-2z m4 0h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m3 0h1v1h-1z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m-20 1h1v1h-1z m6 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m6 0h1v1h-1z m-20 1h7v1h-7z m8 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h7v1h-7z m-5 1h2v1h-2z m-9 1h1v1h-1z m2 0h1v1h-1z m3 0h2v1h-2z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m3 0h2v1h-2z m3 0h1v1h-1z m-18 1h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m-20 1h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m3 0h1v1h-1z m-17 1h2v1h-2z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z m2 0h2v1h-2z m-17 1h1v1h-1z m3 0h2v1h-2z m3 0h1v1h-1z m3 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m4 0h1v1h-1z m-12 1h1v1h-1z m2 0h1v1h-1z m3 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m-19 1h7v1h-7z m9 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m-18 1h1v1h-1z m6 0h1v1h-1z m2 0h1v1h-1z m4 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m3 0h2v1h-2z m5 0h1v1h-1z m2 0h2v1h-2z m3 0h1v1h-1z m-19 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m2 0h1v1h-1z m3 0h2v1h-2z m4 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m-20 1h1v1h-1z m2 0h3v1h-3z m4 0h1v1h-1z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m3 0h1v1h-1z m-20 1h1v1h-1z m6 0h1v1h-1z m2 0h2v1h-2z m4 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m2 0h2v1h-2z m-18 1h7v1h-7z m10 0h2v1h-2z m3 0h1v1h-1z m2 0h1v1h-1z m2 0h1v1h-1z m3 0h1v1h-1z",
+                              "viewBox": [
+                                0,
+                                0,
+                                21,
+                                21
+                              ],
+                              "fill": "$--ink",
                               "width": 120,
-                              "height": 120,
-                              "iconFontName": "qr-code",
-                              "iconFontFamily": "lucide",
-                              "fill": "$--ink"
+                              "height": 120
                             }
                           ]
                         }
@@ -14408,6 +14283,809 @@
               "fontStyle": "italic"
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "D6dfT",
+      "x": 25,
+      "y": 4270,
+      "name": "Screen / Coming Soon Splash",
+      "width": 1440,
+      "fill": "#FFFFFF",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Xvfh6",
+          "name": "heroSection",
+          "width": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "oXpSR",
+              "name": "navBar",
+              "width": "fill_container",
+              "padding": [
+                24,
+                120
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "X9tPK3",
+                  "name": "navLogo",
+                  "fill": "#1A1A1A",
+                  "content": "CON·SIGN",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 14,
+                  "fontWeight": "600",
+                  "letterSpacing": 3
+                },
+                {
+                  "type": "frame",
+                  "id": "ng9pv",
+                  "name": "navRight",
+                  "gap": 32,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "e79s9",
+                      "name": "navSignIn",
+                      "fill": "$--ink-25",
+                      "content": "SIGN IN",
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 11,
+                      "fontWeight": "500",
+                      "letterSpacing": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "JP6x1",
+          "name": "featuresSection",
+          "width": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "nA8Vr",
+              "name": "hlZone",
+              "clip": true,
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "layout": "vertical",
+              "padding": [
+                120,
+                80
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "PKepJ",
+                  "name": "hlCaption",
+                  "fill": "#666666",
+                  "content": "THE HOTEL DOOR UPGRADE NOBODY ASKED FOR",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 11,
+                  "letterSpacing": 3
+                },
+                {
+                  "type": "text",
+                  "id": "FM2rm",
+                  "name": "hlText",
+                  "fill": "#1A1A1A",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "YOUR DOOR HAS\nLORE NOW.",
+                  "lineHeight": 0.95,
+                  "textAlign": "center",
+                  "fontFamily": "Playfair Display",
+                  "fontSize": 130,
+                  "fontWeight": "700",
+                  "letterSpacing": -3
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "gycdv",
+              "name": "descZone",
+              "width": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                0,
+                200,
+                80,
+                200
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Ap8Js",
+                  "name": "descText",
+                  "fill": "#666666",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Stick an e-ink screen on your hotel door. Update your status from your phone. Never answer 'where are you' again.",
+                  "lineHeight": 1.7,
+                  "textAlign": "center",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 15
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Y0Gtux",
+              "name": "grid",
+              "width": "fill_container",
+              "gap": 48,
+              "padding": [
+                80,
+                120
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "NKvX7",
+                  "name": "col1",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "D8VpOL",
+                      "name": "c1Lbl",
+                      "fill": "#666666",
+                      "content": "01",
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 11,
+                      "letterSpacing": 2
+                    },
+                    {
+                      "type": "text",
+                      "id": "ltahR",
+                      "name": "c1Hd",
+                      "fill": "#1A1A1A",
+                      "content": "REAL-TIME STATUS",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 24,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "pY5Kt",
+                      "name": "c1Bd",
+                      "fill": "#666666",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "In the room? Passed out? Gone feral in the dealers' den? Set it from your phone and the door handles the rest.",
+                      "lineHeight": 1.6,
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 13
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "NCwSF",
+                  "name": "col2",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "nH06u",
+                      "name": "c2Lbl",
+                      "fill": "#666666",
+                      "content": "02",
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 11,
+                      "letterSpacing": 2
+                    },
+                    {
+                      "type": "text",
+                      "id": "vOKwt",
+                      "name": "c2Hd",
+                      "fill": "#1A1A1A",
+                      "content": "E-INK DOOR SIGN",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 24,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "rV86B",
+                      "name": "c2Bd",
+                      "fill": "#666666",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "A little e-ink screen that sits on your door and never dies. Shows who's around, what they're doing, and a QR code so people can find you.",
+                      "lineHeight": 1.6,
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 13
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kKx0l",
+                  "name": "col3",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "uGpwf",
+                      "name": "c3Lbl",
+                      "fill": "#666666",
+                      "content": "03",
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 11,
+                      "letterSpacing": 2
+                    },
+                    {
+                      "type": "text",
+                      "id": "DKkKw",
+                      "name": "c3Hd",
+                      "fill": "#1A1A1A",
+                      "content": "PRIVACY TIERS",
+                      "fontFamily": "Playfair Display",
+                      "fontSize": 24,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "W8sI1S",
+                      "name": "c3Bd",
+                      "fill": "#666666",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Randos get the basics. Friends with the passcode get the full picture. You pick who sees what.",
+                      "lineHeight": 1.6,
+                      "fontFamily": "IBM Plex Mono",
+                      "fontSize": 13
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Yr9uR",
+              "name": "ftr",
+              "width": "fill_container",
+              "padding": [
+                48,
+                120
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "KIYna",
+                  "name": "ftrL",
+                  "fill": "#1A1A1A",
+                  "content": "cons.social",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "s9pl8",
+                  "name": "ftrR",
+                  "fill": "#666666",
+                  "content": "© 2026 CON·SIGN",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 13
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "X6tFwK",
+      "x": 1545,
+      "y": 4270,
+      "name": "Screen / Coming Soon Splash (Mobile)",
+      "width": 390,
+      "fill": "#FFFFFF",
+      "cornerRadius": "$--radius-md",
+      "stroke": {
+        "align": "inside",
+        "thickness": 2,
+        "fill": "$--ink"
+      },
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "z3wm6",
+          "name": "nav",
+          "width": "fill_container",
+          "padding": [
+            20,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "ImwSV",
+              "fill": "#1A1A1A",
+              "content": "CON·SIGN",
+              "fontFamily": "IBM Plex Mono",
+              "fontSize": 13,
+              "fontWeight": "600",
+              "letterSpacing": 3
+            },
+            {
+              "type": "text",
+              "id": "IVUwE",
+              "fill": "$--ink-25",
+              "content": "SIGN IN",
+              "fontFamily": "IBM Plex Mono",
+              "fontSize": 11,
+              "fontWeight": "500",
+              "letterSpacing": 2
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "N7pNvN",
+          "name": "headline",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": [
+            80,
+            24
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "EEPXw",
+              "fill": "#666666",
+              "content": "THE HOTEL DOOR UPGRADE NOBODY ASKED FOR",
+              "fontFamily": "IBM Plex Mono",
+              "fontSize": 10,
+              "fontWeight": "normal",
+              "letterSpacing": 3
+            },
+            {
+              "type": "text",
+              "id": "GipQh",
+              "fill": "#1A1A1A",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "YOUR DOOR HAS\nLORE NOW.",
+              "lineHeight": 0.95,
+              "textAlign": "center",
+              "fontFamily": "Playfair Display",
+              "fontSize": 56,
+              "fontWeight": "700",
+              "letterSpacing": -2
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "oOSrs",
+          "name": "subtitle",
+          "width": "fill_container",
+          "layout": "vertical",
+          "padding": [
+            0,
+            24,
+            48,
+            24
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "jeMoK",
+              "fill": "#666666",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Stick an e-ink screen on your hotel door. Update your status from your phone. Never answer 'where are you' again.",
+              "lineHeight": 1.7,
+              "textAlign": "center",
+              "fontFamily": "IBM Plex Mono",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "I61Pm0",
+          "name": "features",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 40,
+          "padding": [
+            40,
+            24,
+            48,
+            24
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "EoqNE",
+              "name": "f1",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "w2BquJ",
+                  "fill": "#666666",
+                  "content": "01",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 2
+                },
+                {
+                  "type": "text",
+                  "id": "B0Tw8",
+                  "fill": "#1A1A1A",
+                  "content": "REAL-TIME STATUS",
+                  "fontFamily": "Playfair Display",
+                  "fontSize": 20,
+                  "fontWeight": "700",
+                  "letterSpacing": 1
+                },
+                {
+                  "type": "text",
+                  "id": "FAYmA",
+                  "fill": "#666666",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "In the room? Passed out? Gone feral in the dealers' den? Set it from your phone and the door handles the rest.",
+                  "lineHeight": 1.6,
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "odaBv",
+              "name": "f2",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "mrx1h",
+                  "fill": "#666666",
+                  "content": "02",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 2
+                },
+                {
+                  "type": "text",
+                  "id": "q6CNSN",
+                  "fill": "#1A1A1A",
+                  "content": "E-INK DOOR SIGN",
+                  "fontFamily": "Playfair Display",
+                  "fontSize": 20,
+                  "fontWeight": "700",
+                  "letterSpacing": 1
+                },
+                {
+                  "type": "text",
+                  "id": "WVMDG",
+                  "fill": "#666666",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "A little e-ink screen that sits on your door and never dies. Shows who's around, what they're doing, and a QR code so people can find you.",
+                  "lineHeight": 1.6,
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WEmCD",
+              "name": "f3",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "fkKa7",
+                  "fill": "#666666",
+                  "content": "03",
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 2
+                },
+                {
+                  "type": "text",
+                  "id": "KkEle",
+                  "fill": "#1A1A1A",
+                  "content": "PRIVACY TIERS",
+                  "fontFamily": "Playfair Display",
+                  "fontSize": 20,
+                  "fontWeight": "700",
+                  "letterSpacing": 1
+                },
+                {
+                  "type": "text",
+                  "id": "U1F5St",
+                  "fill": "#666666",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Randos get the basics. Friends with the passcode get the full picture. You pick who sees what.",
+                  "lineHeight": 1.6,
+                  "fontFamily": "IBM Plex Mono",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "M4YOcC",
+          "name": "footer",
+          "width": "fill_container",
+          "padding": [
+            32,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "X9ruS",
+              "fill": "#1A1A1A",
+              "content": "cons.social",
+              "fontFamily": "IBM Plex Mono",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "c8A1W",
+              "fill": "#666666",
+              "content": "© 2026 CON·SIGN",
+              "fontFamily": "IBM Plex Mono",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "rH8gH",
+      "x": 25,
+      "y": 5459,
+      "name": "Asset / og.png (1200×630)",
+      "width": 1200,
+      "height": 630,
+      "fill": "#FFFFFF",
+      "layout": "vertical",
+      "gap": 16,
+      "padding": [
+        0,
+        80
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "SfSQa",
+          "name": "ogCaption",
+          "fill": "#666666",
+          "content": "THE HOTEL DOOR UPGRADE NOBODY ASKED FOR",
+          "fontFamily": "IBM Plex Mono",
+          "fontSize": 11,
+          "fontWeight": "normal",
+          "letterSpacing": 3
+        },
+        {
+          "type": "text",
+          "id": "oC6iO",
+          "name": "ogHeadline",
+          "fill": "#1A1A1A",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "YOUR DOOR HAS\nLORE NOW.",
+          "lineHeight": 0.95,
+          "textAlign": "center",
+          "fontFamily": "Playfair Display",
+          "fontSize": 96,
+          "fontWeight": "700",
+          "letterSpacing": -2
+        },
+        {
+          "type": "text",
+          "id": "r9RYd",
+          "name": "ogDomain",
+          "fill": "#1A1A1A",
+          "content": "cons.social",
+          "fontFamily": "IBM Plex Mono",
+          "fontSize": 14,
+          "fontWeight": "600",
+          "letterSpacing": 2
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "pz0ou",
+      "x": 25,
+      "y": 6169,
+      "name": "Asset / Telegram Bot Avatar (512×512)",
+      "width": 512,
+      "height": 512,
+      "fill": "#1A1A1A",
+      "layout": "none",
+      "children": [
+        {
+          "type": "ellipse",
+          "id": "g1Yci",
+          "x": 16,
+          "y": 16,
+          "name": "outerRing",
+          "width": 480,
+          "height": 480,
+          "stroke": {
+            "align": "inside",
+            "thickness": 2,
+            "fill": "#333333"
+          }
+        },
+        {
+          "type": "text",
+          "id": "X6E1o6",
+          "x": 88,
+          "y": 100,
+          "name": "avatarC",
+          "fill": "#FFFFFF",
+          "content": "C",
+          "fontFamily": "Playfair Display",
+          "fontSize": 240,
+          "fontWeight": "700"
+        },
+        {
+          "type": "ellipse",
+          "id": "KSHG8",
+          "x": 244,
+          "y": 258,
+          "name": "avatarDot",
+          "fill": "#FFFFFF",
+          "width": 24,
+          "height": 24
+        },
+        {
+          "type": "text",
+          "id": "LrQbt",
+          "x": 264,
+          "y": 100,
+          "name": "avatarS",
+          "fill": "#FFFFFF",
+          "content": "S",
+          "fontFamily": "Playfair Display",
+          "fontSize": 240,
+          "fontWeight": "700"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "IETSw",
+      "x": 617,
+      "y": 6169,
+      "name": "Asset / Telegram Welcome (1280×720)",
+      "width": 1280,
+      "height": 720,
+      "fill": "#1A1A1A",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": [
+        0,
+        80
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "IbkKP",
+          "name": "caption",
+          "fill": "#666666",
+          "content": "WELCOME TO",
+          "fontFamily": "$--font-mono",
+          "fontSize": 12,
+          "fontWeight": "normal",
+          "letterSpacing": 4
+        },
+        {
+          "type": "text",
+          "id": "crqPb",
+          "name": "headline",
+          "fill": "$--paper",
+          "content": "CON·SIGN",
+          "fontFamily": "Playfair Display",
+          "fontSize": 96,
+          "fontWeight": "700"
+        },
+        {
+          "type": "text",
+          "id": "m5wl05",
+          "name": "tagline",
+          "fill": "#999999",
+          "content": "Your door has lore now.",
+          "fontFamily": "$--font-body",
+          "fontSize": 24,
+          "fontWeight": "normal",
+          "fontStyle": "italic"
+        },
+        {
+          "type": "rectangle",
+          "id": "N99rGx",
+          "name": "separator",
+          "fill": "#333333",
+          "width": 200,
+          "height": 0
+        },
+        {
+          "type": "text",
+          "id": "SafSv",
+          "name": "bottom",
+          "fill": "#666666",
+          "content": "cons.social",
+          "fontFamily": "$--font-mono",
+          "fontSize": 14,
+          "fontWeight": "600",
+          "letterSpacing": 2
         }
       ]
     }

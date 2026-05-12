@@ -3,6 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2024-10-04"
 compatibility_flags = ["nodejs_compat"]
 
+# Bundle .wasm imports as CompiledWasm so `import wasm from '...wasm'`
+# resolves to a WebAssembly.Module at runtime. resvg-wasm depends on this
+# for its initWasm() call.
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+fallthrough = true
+
 # Apex (`cons.social`) is owned by the Pages project (`con-sign`). The
 # Worker only handles the API surface via this route.
 routes = [
