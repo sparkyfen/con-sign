@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import { requireUser } from '../auth/middleware.js';
@@ -14,10 +14,32 @@ import {
   verifySession,
 } from '../auth/session.js';
 import { TelegramAuthError, verifyTelegramLogin } from '../auth/telegram.js';
-import { getUserDisplayName, listIdentitiesForUser, upsertIdentity } from '../db/queries.js';
+import {
+  IdentityCollisionError,
+  getUserDisplayName,
+  listIdentitiesForUser,
+  upsertIdentity,
+} from '../db/queries.js';
 import type { SessionUser } from '@con-sign/shared';
 
 export const authRoutes = new Hono<Env>();
+
+/**
+ * If the request already carries a valid `cs_session` cookie, return that
+ * user_id so an OAuth/Telegram callback knows it's a "link this identity
+ * to my existing account" flow rather than a fresh login. Returns null on
+ * missing/invalid/revoked.
+ */
+async function readActiveUserId(c: Context<Env>): Promise<string | null> {
+  const token = readCookie(c.req.header('Cookie'), SESSION_COOKIE);
+  if (!token) return null;
+  try {
+    const payload = await verifySession(token, c.env.SESSION_HMAC);
+    return payload.kind === 'user' ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── BlueSky OAuth ─────────────────────────────────────────────────────────
 
@@ -78,14 +100,28 @@ authRoutes.get('/bsky/callback', async (c) => {
       })
     : {};
 
-  const userId = await upsertIdentity(c.env.DB, {
-    provider: 'bsky',
-    providerId: did,
-    handle: profile.handle ?? null,
-    avatarUrl: profile.avatar ?? null,
-    displayName: profile.displayName || profile.handle || `bsky-${did.slice(-8)}`,
-    rawProfile: profile,
-  });
+  const linkToUserId = (await readActiveUserId(c)) ?? undefined;
+  let userId: string;
+  try {
+    userId = await upsertIdentity(c.env.DB, {
+      provider: 'bsky',
+      providerId: did,
+      handle: profile.handle ?? null,
+      avatarUrl: profile.avatar ?? null,
+      displayName: profile.displayName || profile.handle || `bsky-${did.slice(-8)}`,
+      rawProfile: profile,
+      linkToUserId,
+    });
+  } catch (err) {
+    if (err instanceof IdentityCollisionError) {
+      throw new HttpError(
+        409,
+        'identity_already_linked',
+        'This Bluesky account is already linked to a different con-sign user. Log out first to switch.',
+      );
+    }
+    throw err;
+  }
 
   const session = newUserSession(userId);
   const token = await signSession(session, c.env.SESSION_HMAC);
@@ -115,16 +151,30 @@ authRoutes.post('/telegram/callback', async (c) => {
   }
 
   const displayName = [parsed.first_name, parsed.last_name].filter(Boolean).join(' ');
-  const userId = await upsertIdentity(c.env.DB, {
-    provider: 'telegram',
-    providerId: String(parsed.id),
-    handle: parsed.username ?? null,
-    // We don't store the photo_url Telegram gave us — it expires. Avatars
-    // are served live via /api/avatar/tg/:id which hits the Bot API.
-    avatarUrl: null,
-    displayName: displayName || `tg-${parsed.id}`,
-    rawProfile: parsed,
-  });
+  const linkToUserId = (await readActiveUserId(c)) ?? undefined;
+  let userId: string;
+  try {
+    userId = await upsertIdentity(c.env.DB, {
+      provider: 'telegram',
+      providerId: String(parsed.id),
+      handle: parsed.username ?? null,
+      // We don't store the photo_url Telegram gave us — it expires. Avatars
+      // are served live via /api/avatar/tg/:id which hits the Bot API.
+      avatarUrl: null,
+      displayName: displayName || `tg-${parsed.id}`,
+      rawProfile: parsed,
+      linkToUserId,
+    });
+  } catch (err) {
+    if (err instanceof IdentityCollisionError) {
+      throw new HttpError(
+        409,
+        'identity_already_linked',
+        'This Telegram account is already linked to a different con-sign user. Log out first to switch.',
+      );
+    }
+    throw err;
+  }
 
   const session = newUserSession(userId);
   const token = await signSession(session, c.env.SESSION_HMAC);

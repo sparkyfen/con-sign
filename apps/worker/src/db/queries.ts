@@ -36,8 +36,36 @@ export interface IdentityRow {
 }
 
 /**
- * Upsert an external identity, creating the underlying user if no identity
- * with this (provider, provider_id) exists yet. Returns the user_id.
+ * Thrown by upsertIdentity when `linkToUserId` is set and the requested
+ * (provider, provider_id) is already attached to a *different* user.
+ */
+export class IdentityCollisionError extends Error {
+  constructor(
+    public readonly provider: 'bsky' | 'telegram',
+    public readonly providerId: string,
+    public readonly existingUserId: string,
+    public readonly attemptedUserId: string,
+  ) {
+    super(`identity ${provider}:${providerId} already linked to a different user`);
+  }
+}
+
+/**
+ * Upsert an external identity. Behavior depends on `linkToUserId`:
+ *
+ *   - **`linkToUserId` undefined** (the bare login flow):
+ *       - existing identity → return its existing user_id (no merge);
+ *       - no existing identity → create a fresh user + identity.
+ *   - **`linkToUserId` set** (user is already logged in via another
+ *     provider, OAuth callback wants to attach this identity to the
+ *     current session's user):
+ *       - existing identity on the same user → no-op, return it;
+ *       - existing identity on a *different* user → throw
+ *         `IdentityCollisionError`. Caller should surface 409;
+ *       - no existing identity → create a new identity row bound to
+ *         the supplied user_id (no new `user` row).
+ *
+ * Returns the resolved user_id on success.
  */
 export async function upsertIdentity(
   db: D1Database,
@@ -48,6 +76,8 @@ export async function upsertIdentity(
     avatarUrl: string | null;
     displayName: string;
     rawProfile: unknown;
+    /** Active session's user_id, if the call is part of a link-account flow. */
+    linkToUserId?: string | undefined;
   },
 ): Promise<string> {
   const existing = await db
@@ -56,6 +86,14 @@ export async function upsertIdentity(
     .first<{ user_id: string }>();
 
   if (existing) {
+    if (args.linkToUserId && existing.user_id !== args.linkToUserId) {
+      throw new IdentityCollisionError(
+        args.provider,
+        args.providerId,
+        existing.user_id,
+        args.linkToUserId,
+      );
+    }
     await db
       .prepare(
         'UPDATE identity SET handle = ?, avatar_url = ?, raw_profile_json = ? ' +
@@ -72,6 +110,27 @@ export async function upsertIdentity(
     return existing.user_id;
   }
 
+  // Attach to existing session user — create only the identity row.
+  if (args.linkToUserId) {
+    await db
+      .prepare(
+        'INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url, raw_profile_json) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(
+        newId(),
+        args.linkToUserId,
+        args.provider,
+        args.providerId,
+        args.handle,
+        args.avatarUrl,
+        JSON.stringify(args.rawProfile),
+      )
+      .run();
+    return args.linkToUserId;
+  }
+
+  // Fresh login — create user + identity.
   const userId = newId();
   const identityId = newId();
   await db.batch([
