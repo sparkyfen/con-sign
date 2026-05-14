@@ -8,11 +8,18 @@ without per-device backend changes.
 This directory holds device-specific design notes and setup
 instructions. Each subdir owns one device family.
 
+## Generic contract
+
+Every device — commercial or custom — speaks the protocol described in
+[`protocol.md`](./protocol.md). Commercial-firmware devices get a thin
+adapter route alongside, but the underlying state machine and image
+endpoint are shared.
+
 ## Currently planned
 
 | Device | Status | Plan |
 |---|---|---|
-| TRMNL (7.5", 800×480) | Plan drafted, no code | [`trmnl/PLAN.md`](./trmnl/PLAN.md) |
+| TRMNL (7.5", 800×480) | Backend done; hardware verification pending | [`trmnl/PLAN.md`](./trmnl/PLAN.md) |
 
 ## Probably later (no plan yet)
 

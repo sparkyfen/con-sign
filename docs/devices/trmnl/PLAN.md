@@ -1,8 +1,10 @@
 # PLAN — TRMNL
 
-Status: **plan drafted, no code**. Hardware: 7.5" TRMNL, ESP32-based,
-800×480 e-ink, Wi-Fi, battery-powered. Polls an HTTPS URL on a
-configurable interval.
+Status: **Mode B backend implemented; awaiting hardware verification.**
+Hardware: 7.5" TRMNL, ESP32-based, 800×480 e-ink, Wi-Fi, battery-powered.
+Polls an HTTPS URL on a configurable interval. See
+[`../protocol.md`](../protocol.md) for the device-agnostic contract that
+sits underneath this adapter.
 
 ## Goal
 
@@ -211,8 +213,30 @@ overrides). TRMNL adapter picks the format that matches firmware.
 - Group billing / multi-tenant TRMNL — if we ever support TRMNL
   fleet management for con organisers, that's a separate plan.
 
-## When to revisit
+## What's done (as of 2026-05-14)
 
-When you (or anyone) decides to actually flash a TRMNL and pair it
-to a room. The first commit out of this plan is the `0004` migration
-+ the PNG raster step; everything else builds on those two.
+- `0004_device_mac.sql` migration ✅
+- PNG render via `@resvg/resvg-wasm` ✅
+- `?fmt=png` flag + 60 s edge cache ✅
+- `?d=<uuid>` bearer fallback (Mode A unblocker) ✅
+- IBM Plex Mono bundled for resvg ✅
+- Con name + day counter in the rendered sign ✅
+- `apps/worker/src/trmnl/refresh-policy.ts` ✅
+- `apps/worker/src/trmnl/adapter.ts` ✅
+- `GET /api/trmnl/setup`, `GET /api/trmnl/display`, `POST /api/trmnl/log` ✅
+- CSRF Origin carve-out for `/api/trmnl/*` ✅
+- Integration tests covering setup, display (unpaired + paired), log,
+  CSRF carve-out ✅
+- Mode A smoke test against a hand-seeded room ✅
+
+## What's left
+
+- **Hardware verification**: flash a TRMNL with BYOS firmware pointing at
+  `cons.social/api/trmnl`, watch the unpaired-OTP screen appear, claim
+  via the dashboard (or D1 until the dashboard ships), confirm paired
+  sign renders correctly on real e-ink.
+- **`docs/devices/trmnl/SETUP.md`**: written from real pairing experience.
+- **BMP1 encoder**: conditional. Only needed if the TRMNL firmware
+  version on the actual unit rejects PNG.
+- **Audit log writes** for `trmnl.setup` (first-seen) and friends — small
+  follow-up if useful for forensics.

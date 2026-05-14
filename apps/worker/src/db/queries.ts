@@ -387,6 +387,63 @@ export interface DeviceRow {
   created_at: string;
 }
 
+/**
+ * Look up a device by MAC address, or insert a fresh unpaired row if none
+ * exists. Used by TRMNL's /setup handshake — the device identifies itself by
+ * MAC, we hand back a stable UUID it'll use for the rest of its life.
+ *
+ * Returns the device's id (the value the device should treat as its
+ * `Access-Token` going forward).
+ */
+export async function getOrCreateDeviceByMac(
+  db: D1Database,
+  macAddress: string,
+): Promise<string> {
+  const existing = await db
+    .prepare('SELECT id FROM device WHERE mac_address = ?')
+    .bind(macAddress)
+    .first<{ id: string }>();
+  if (existing) return existing.id;
+
+  const id = newId();
+  await db
+    .prepare('INSERT INTO device (id, mac_address) VALUES (?, ?)')
+    .bind(id, macAddress)
+    .run();
+  return id;
+}
+
+/**
+ * One-shot lookup that joins device → room → con for the TRMNL display
+ * envelope. Returns null if the device row doesn't exist; returns the
+ * device plus nullable room+con fields if the device is unpaired or
+ * paired-but-orphaned.
+ */
+export async function getDeviceWithCon(
+  db: D1Database,
+  deviceId: string,
+): Promise<{
+  device: DeviceRow;
+  con_start_date: string | null;
+  con_end_date: string | null;
+} | null> {
+  const row = await db
+    .prepare(
+      `SELECT device.*,
+              con.start_date AS con_start_date,
+              con.end_date AS con_end_date
+         FROM device
+    LEFT JOIN room ON room.id = device.room_id
+    LEFT JOIN con  ON con.id = room.con_id
+        WHERE device.id = ?`,
+    )
+    .bind(deviceId)
+    .first<DeviceRow & { con_start_date: string | null; con_end_date: string | null }>();
+  if (!row) return null;
+  const { con_start_date, con_end_date, ...device } = row;
+  return { device, con_start_date, con_end_date };
+}
+
 export async function getDevice(db: D1Database, deviceId: string): Promise<DeviceRow | null> {
   return db.prepare('SELECT * FROM device WHERE id = ?').bind(deviceId).first<DeviceRow>();
 }

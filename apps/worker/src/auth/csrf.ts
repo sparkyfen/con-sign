@@ -20,10 +20,23 @@ import { HttpError } from '../errors.js';
  *
  * GET/HEAD/OPTIONS are skipped: they're either side-effect-free
  * (Bluesky's OAuth callback is GET) or preflight machinery.
+ *
+ * Device-adapter routes under /api/<device>/* are also skipped: they're
+ * server-to-device, never browser-driven, and auth via their own bearer
+ * header (e.g. TRMNL's Access-Token). Embedded devices don't send
+ * Origin and the CSRF threat model doesn't apply to them.
  */
+const DEVICE_ADAPTER_PATH_PREFIX = '/api/trmnl/';
+
 export const csrfOriginCheck: MiddlewareHandler<Env> = async (c, next) => {
   const method = c.req.method.toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    await next();
+    return;
+  }
+
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith(DEVICE_ADAPTER_PATH_PREFIX)) {
     await next();
     return;
   }

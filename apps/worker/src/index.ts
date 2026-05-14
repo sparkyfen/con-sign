@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth.js';
 import { avatarRoutes } from './routes/avatar.js';
 import { conRoutes } from './routes/cons.js';
 import { deviceRoutes } from './routes/device.js';
+import { trmnlRoutes } from './routes/devices/trmnl.js';
 import { meRoutes } from './routes/me.js';
 import { partyRoutes } from './routes/parties.js';
 import { roomRoutes } from './routes/rooms.js';
@@ -72,6 +73,7 @@ app.route('/api/me', meRoutes);
 app.route('/api/r', visitorRoutes);
 app.route('/api/rooms', roomRoutes);
 app.route('/api/device', deviceRoutes);
+app.route('/api/trmnl', trmnlRoutes);
 app.route('/api/parties', partyRoutes);
 
 app.notFound((c) => c.json({ error: 'not_found' }, 404));

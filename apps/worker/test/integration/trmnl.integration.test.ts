@@ -1,0 +1,158 @@
+import { describe, expect, it } from 'vitest';
+import { call, loginAs, newCtx, seedCon } from '../helpers.js';
+
+const ADMIN = '00000000-0000-0000-0000-000000000aa1';
+const MAC_A = 'AA:BB:CC:11:22:33';
+const MAC_B = 'AA:BB:CC:44:55:66';
+
+interface SetupResponse {
+  api_key: string;
+  friendly_id: string;
+}
+interface DisplayResponse {
+  filename: string;
+  image_url: string;
+  refresh_rate: number;
+}
+interface RoomCreated {
+  room: { id: string };
+  me: { roommateId: string };
+}
+
+describe('integration: TRMNL adapter routes', () => {
+  it('rejects /setup without a MAC header', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/trmnl/setup');
+    expect(r.status).toBe(400);
+    expect((r.body as { error: string }).error).toBe('invalid_mac');
+  });
+
+  it('rejects /setup with a malformed MAC', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/trmnl/setup', {
+      headers: { ID: 'not-a-mac' },
+    });
+    expect(r.status).toBe(400);
+  });
+
+  it('/setup mints a fresh api_key for a new MAC', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } });
+    expect(r.status).toBe(200);
+    const body = r.body as SetupResponse;
+    expect(body.api_key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}/); // uuid
+    expect(body.friendly_id).toHaveLength(8);
+    expect(body.friendly_id).toBe(body.api_key.slice(0, 8).toUpperCase());
+  });
+
+  it('/setup returns the same api_key on re-pair (factory reset survives)', async () => {
+    const ctx = newCtx();
+    const first = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    const second = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    expect(second.api_key).toBe(first.api_key);
+  });
+
+  it('/setup issues distinct keys for distinct MACs', async () => {
+    const ctx = newCtx();
+    const a = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    const b = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_B } }))
+      .body as SetupResponse;
+    expect(a.api_key).not.toBe(b.api_key);
+  });
+
+  it('/display rejects requests without Access-Token', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/trmnl/display');
+    expect(r.status).toBe(401);
+  });
+
+  it('/display rejects an unknown Access-Token', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/trmnl/display', {
+      headers: { 'Access-Token': '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(r.status).toBe(401);
+    expect((r.body as { error: string }).error).toBe('unknown_device');
+  });
+
+  it('/display returns an envelope pointing at /api/device/sign.png with the bearer', async () => {
+    const ctx = newCtx();
+    const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    const r = await call(ctx, 'GET', '/api/trmnl/display', {
+      headers: { 'Access-Token': setup.api_key },
+    });
+    expect(r.status).toBe(200);
+    const body = r.body as DisplayResponse;
+    expect(body.image_url).toContain('/api/device/sign.png');
+    expect(body.image_url).toContain(`d=${setup.api_key}`);
+    expect(body.image_url).toContain('fmt=png');
+    expect(body.refresh_rate).toBe(300); // unpaired → 5 min
+    expect(body.filename).toMatch(/^sign-/);
+  });
+
+  it('/display uses the con-aware refresh rate once the device is paired', async () => {
+    const ctx = newCtx();
+    const conId = await seedCon(ctx, {
+      name: 'Test Con',
+      startDate: '2020-01-01',
+      endDate: '2020-01-04',
+    });
+    await loginAs(ctx, ADMIN);
+    const room = (await call(ctx, 'POST', '/api/rooms', { body: { conId, name: 'R' } }))
+      .body as RoomCreated;
+    const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+
+    // Pair the device into the room (simulate the OTP-claim flow without
+    // round-tripping through KV, since claimDevice is the same code path).
+    await ctx.env.DB.prepare(
+      "UPDATE device SET room_id = ?, paired_at = datetime('now') WHERE id = ?",
+    )
+      .bind(room.room.id, setup.api_key)
+      .run();
+
+    const r = await call(ctx, 'GET', '/api/trmnl/display', {
+      headers: { 'Access-Token': setup.api_key },
+    });
+    const body = r.body as DisplayResponse;
+    // Con ended in 2020; we're now far outside the 7-day window.
+    expect(body.refresh_rate).toBe(86400);
+  });
+
+  it('/log accepts a body, stores under trmnl:log:<deviceId>, and 204s', async () => {
+    const ctx = newCtx();
+    const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    const r = await call(ctx, 'POST', '/api/trmnl/log', {
+      body: { battery: 92, msg: 'hello' },
+      headers: { 'Access-Token': setup.api_key },
+    });
+    expect(r.status).toBe(204);
+    const stored = await ctx.env.SESSIONS.get(`trmnl:log:${setup.api_key}`);
+    expect(stored).toContain('hello');
+  });
+
+  it('/log rejects without Access-Token', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'POST', '/api/trmnl/log', { body: { msg: 'nope' } });
+    expect(r.status).toBe(401);
+  });
+
+  it('CSRF middleware does not require Origin on /api/trmnl/* POSTs', async () => {
+    // The TRMNL device sends no Origin header; verify the carve-out
+    // actually lets the POST through (without the carve-out, this would
+    // be 403 origin_required).
+    const ctx = newCtx();
+    const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    const r = await call(ctx, 'POST', '/api/trmnl/log', {
+      body: { msg: 'hi' },
+      headers: { 'Access-Token': setup.api_key, Origin: '' },
+    });
+    expect(r.status).toBe(204);
+  });
+});

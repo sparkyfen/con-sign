@@ -285,6 +285,43 @@ Sets `revoked_at` on the device row; the panel's next poll renders the
 entirely (no API for that yet — open question if needed).
 Response: `{ ok: true }`.
 
+## TRMNL adapter (commercial-firmware device)
+
+These exist only to speak the URL paths + JSON shapes TRMNL's stock
+BYOS firmware hardcodes. The underlying state machine and image
+dispatch are shared with the generic `/api/device/sign.png` route.
+CSRF Origin check skips `/api/trmnl/*` since the device isn't a
+browser; auth is the `Access-Token` header / `ID` MAC header.
+
+### `GET /api/trmnl/setup` *(MAC handshake)*
+Header: `ID: <MAC>` (colon-separated, e.g. `AA:BB:CC:11:22:33`).
+Returns `{ api_key, friendly_id, ... }`. The `api_key` is a stable UUID
+the device uses as its `Access-Token` for life. Re-calling /setup with
+the same MAC (factory-reset) returns the existing api_key so the
+device's audit history doesn't orphan.
+
+### `GET /api/trmnl/display` *(device bearer)*
+Header: `Access-Token: <api_key>`. Returns TRMNL's expected JSON
+envelope:
+```json
+{
+  "filename": "sign-<prefix>-<bucket>.png",
+  "image_url": "https://cons.social/api/device/sign.png?d=<api_key>&fmt=png&w=800&h=480",
+  "refresh_rate": 300
+}
+```
+`refresh_rate` adapts to the device's room/con: 300 s during the con,
+3600 s in the ±7-day window around it, 86400 s otherwise. Unpaired
+devices get the 5-minute rate so the rotating OTP code stays fresh.
+
+### `POST /api/trmnl/log` *(device bearer)*
+Header: `Access-Token: <api_key>`. Body: any text (battery state,
+runtime errors, button events). Truncated to 1 KB, stored under
+`trmnl:log:<api_key>` in KV with a 30-day TTL. Useful for incident
+triage. Returns 204.
+
+---
+
 ### `GET /api/device/sign.png?w=&h=&fmt=&d=` *(device bearer)*
 Bearer is the panel's persistent UUID (firmware-generated). Supplied
 via `Authorization: Bearer <uuid>` (preferred — what BYOS firmware uses)
