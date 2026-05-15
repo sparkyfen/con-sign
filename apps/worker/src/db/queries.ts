@@ -587,10 +587,39 @@ export async function listDevicesForRoom(
   return result.results ?? [];
 }
 
+/**
+ * Look up the user's most-recent BSky and Telegram handles from their
+ * identity rows. Used when inserting a roommate row so we auto-populate
+ * the display handle columns from data the OAuth/Login Widget already
+ * gave us, rather than leaving them null and forcing a manual PATCH.
+ *
+ * Default visibility on those fields is still `private` (the user has
+ * to opt them in via the visibility editor) — this only seeds the
+ * value, not its visibility.
+ */
+async function lookupIdentityHandles(
+  db: D1Database,
+  userId: string,
+): Promise<{ bsky: string | null; telegram: string | null }> {
+  const rows = await db
+    .prepare(
+      'SELECT provider, handle FROM identity WHERE user_id = ? ORDER BY created_at DESC',
+    )
+    .bind(userId)
+    .all<{ provider: 'bsky' | 'telegram'; handle: string | null }>();
+  const out: { bsky: string | null; telegram: string | null } = { bsky: null, telegram: null };
+  for (const r of rows.results ?? []) {
+    if (r.provider === 'bsky' && !out.bsky) out.bsky = r.handle;
+    if (r.provider === 'telegram' && !out.telegram) out.telegram = r.handle;
+  }
+  return out;
+}
+
 export async function createRoomWithAdmin(
   db: D1Database,
   args: { conId: string; name: string; adminUserId: string; passcodeHash: string },
 ): Promise<{ roomId: string; qrSlug: string; roommateId: string }> {
+  const handles = await lookupIdentityHandles(db, args.adminUserId);
   // qr_slug unique constraint: retry on the (extremely unlikely) collision.
   for (let attempt = 0; attempt < 5; attempt++) {
     const roomId = newId();
@@ -603,10 +632,18 @@ export async function createRoomWithAdmin(
           .bind(roomId, args.conId, args.name, qrSlug),
         db
           .prepare(
-            'INSERT INTO roommate (id, room_id, user_id, role, passcode_hash) ' +
-              'VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO roommate (id, room_id, user_id, role, passcode_hash, bsky_handle, telegram_handle) ' +
+              'VALUES (?, ?, ?, ?, ?, ?, ?)',
           )
-          .bind(roommateId, roomId, args.adminUserId, 'admin', args.passcodeHash),
+          .bind(
+            roommateId,
+            roomId,
+            args.adminUserId,
+            'admin',
+            args.passcodeHash,
+            handles.bsky,
+            handles.telegram,
+          ),
       ]);
       return { roomId, qrSlug, roommateId };
     } catch (err) {
@@ -652,12 +689,22 @@ export async function addRoommate(
   db: D1Database,
   args: { roomId: string; userId: string; role: 'admin' | 'member'; passcodeHash: string },
 ): Promise<string> {
+  const handles = await lookupIdentityHandles(db, args.userId);
   const roommateId = newId();
   await db
     .prepare(
-      'INSERT INTO roommate (id, room_id, user_id, role, passcode_hash) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO roommate (id, room_id, user_id, role, passcode_hash, bsky_handle, telegram_handle) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
     )
-    .bind(roommateId, args.roomId, args.userId, args.role, args.passcodeHash)
+    .bind(
+      roommateId,
+      args.roomId,
+      args.userId,
+      args.role,
+      args.passcodeHash,
+      handles.bsky,
+      handles.telegram,
+    )
     .run();
   return roommateId;
 }
