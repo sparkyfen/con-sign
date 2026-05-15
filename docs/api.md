@@ -427,7 +427,11 @@ recall on power users.
 Action vocabulary (more may be added without API breakage):
 `room.create`, `room.rename`, `room.invite_created`, `room.member_joined`,
 `room.member_removed`, `device.setup`, `device.claim`, `device.revoke`,
-`roommate.passcode_rotated`, `roommate.visibility_changed`.
+`roommate.passcode_rotated`, `roommate.role_changed`,
+`roommate.visibility_changed`.
+
+`roommate.role_changed` carries `{from, to}` in `metadata_json` where
+each value is `"admin" | "member"`.
 
 `device.setup` is system-initiated (device beats any user to first
 contact): `actor_user_id` is `null` and `room_id` is `null`. The
