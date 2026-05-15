@@ -27,6 +27,7 @@ export const AUDIT_ACTIONS = [
   'device.claim',
   'device.revoke',
   'roommate.passcode_rotated',
+  'roommate.role_changed',
   'roommate.visibility_changed',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

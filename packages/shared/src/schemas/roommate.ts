@@ -59,6 +59,15 @@ export const updateRoommateSchema = roommateSchema
 export type UpdateRoommate = z.infer<typeof updateRoommateSchema>;
 
 /**
+ * Role-change payload for `POST /api/rooms/:id/roommates/:rid/role`.
+ * Admin-only; cannot demote the last admin (server enforces).
+ */
+export const roleChangeSchema = z.object({
+  role: z.enum(['admin', 'member']),
+});
+export type RoleChange = z.infer<typeof roleChangeSchema>;
+
+/**
  * Returned exactly once when a passcode is generated or rotated. After this
  * response the plaintext is unrecoverable.
  *

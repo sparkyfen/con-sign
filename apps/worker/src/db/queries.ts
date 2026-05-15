@@ -692,6 +692,17 @@ export async function deleteRoommate(db: D1Database, roommateId: string): Promis
   await db.prepare('DELETE FROM roommate WHERE id = ?').bind(roommateId).run();
 }
 
+export async function setRoommateRole(
+  db: D1Database,
+  roommateId: string,
+  role: 'admin' | 'member',
+): Promise<void> {
+  await db
+    .prepare('UPDATE roommate SET role = ? WHERE id = ?')
+    .bind(role, roommateId)
+    .run();
+}
+
 export async function addRoommate(
   db: D1Database,
   args: { roomId: string; userId: string; role: 'admin' | 'member'; passcodeHash: string },

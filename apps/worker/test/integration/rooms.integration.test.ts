@@ -250,4 +250,118 @@ describe('integration: room lifecycle', () => {
     const r = await call(ctx, 'POST', `/api/rooms/${created.room.id}/invite`);
     expect(r.status).toBe(403);
   });
+
+  // ─── role-change endpoint ──────────────────────────────────────────────
+
+  async function setupPair(): Promise<{
+    ctx: Ctx;
+    friendCtx: Ctx;
+    roomId: string;
+    adminRid: string;
+    friendRid: string;
+  }> {
+    const ctx = newCtx();
+    const conId = await seedCon(ctx);
+    await loginAs(ctx, ADMIN);
+    const room = (
+      await call(ctx, 'POST', '/api/rooms', { body: { conId, name: 'Room' } })
+    ).body as RoomCreated;
+
+    const inv = (await call(ctx, 'POST', `/api/rooms/${room.room.id}/invite`)).body as {
+      inviteUrl: string;
+    };
+    const token = inv.inviteUrl.split('/invite/')[1]!;
+
+    const friendCtx = newCtx();
+    Object.assign(friendCtx.env, ctx.env);
+    await loginAs(friendCtx, FRIEND);
+    const join = (await call(friendCtx, 'POST', '/api/rooms/join', { body: { token } })).body as {
+      roommateId: string;
+    };
+
+    return {
+      ctx,
+      friendCtx,
+      roomId: room.room.id,
+      adminRid: room.me.roommateId,
+      friendRid: join.roommateId,
+    };
+  }
+
+  it('admin promotes a member → admin and audit row captures from/to', async () => {
+    const { ctx, roomId, friendRid } = await setupPair();
+    const r = await call(ctx, 'POST', `/api/rooms/${roomId}/roommates/${friendRid}/role`, {
+      body: { role: 'admin' },
+    });
+    expect(r.status).toBe(200);
+    expect((r.body as { role: string }).role).toBe('admin');
+
+    const row = await ctx.env.DB.prepare('SELECT role FROM roommate WHERE id = ?')
+      .bind(friendRid)
+      .first<{ role: string }>();
+    expect(row?.role).toBe('admin');
+
+    const audit = await ctx.env.DB.prepare(
+      "SELECT metadata_json FROM audit_log WHERE action = 'roommate.role_changed' AND target_id = ?",
+    )
+      .bind(friendRid)
+      .first<{ metadata_json: string }>();
+    expect(audit?.metadata_json).toContain('"from":"member"');
+    expect(audit?.metadata_json).toContain('"to":"admin"');
+  });
+
+  it('admin demotes another admin back to member', async () => {
+    const { ctx, roomId, friendRid } = await setupPair();
+    await call(ctx, 'POST', `/api/rooms/${roomId}/roommates/${friendRid}/role`, {
+      body: { role: 'admin' },
+    });
+    const r = await call(ctx, 'POST', `/api/rooms/${roomId}/roommates/${friendRid}/role`, {
+      body: { role: 'member' },
+    });
+    expect(r.status).toBe(200);
+    const row = await ctx.env.DB.prepare('SELECT role FROM roommate WHERE id = ?')
+      .bind(friendRid)
+      .first<{ role: string }>();
+    expect(row?.role).toBe('member');
+  });
+
+  it('refuses to demote the last remaining admin', async () => {
+    const { ctx, roomId, adminRid } = await setupPair();
+    const r = await call(ctx, 'POST', `/api/rooms/${roomId}/roommates/${adminRid}/role`, {
+      body: { role: 'member' },
+    });
+    expect(r.status).toBe(409);
+    expect((r.body as { error: string }).error).toBe('last_admin');
+  });
+
+  it('refuses a member trying to promote anyone', async () => {
+    const { friendCtx, roomId, adminRid } = await setupPair();
+    const r = await call(friendCtx, 'POST', `/api/rooms/${roomId}/roommates/${adminRid}/role`, {
+      body: { role: 'member' },
+    });
+    expect(r.status).toBe(403);
+  });
+
+  it('treats a no-op role change as success without writing an audit row', async () => {
+    const { ctx, roomId, friendRid } = await setupPair();
+    const r = await call(ctx, 'POST', `/api/rooms/${roomId}/roommates/${friendRid}/role`, {
+      body: { role: 'member' },
+    });
+    expect(r.status).toBe(200);
+    const audit = await ctx.env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'roommate.role_changed'",
+    ).first<{ n: number }>();
+    expect(audit?.n).toBe(0);
+  });
+
+  it('404s when the roommate id belongs to a different room', async () => {
+    const { ctx, roomId } = await setupPair();
+    const r = await call(
+      ctx,
+      'POST',
+      `/api/rooms/${roomId}/roommates/00000000-0000-0000-0000-deadbeefcafe/role`,
+      { body: { role: 'admin' } },
+    );
+    expect(r.status).toBe(404);
+  });
 });

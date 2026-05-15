@@ -18,6 +18,7 @@ import {
   updateFieldVisibilitySchema,
   updateRoomSchema,
   updateRoommateSchema,
+  roleChangeSchema,
 } from '@con-sign/shared';
 import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
@@ -41,6 +42,7 @@ import {
   revokeDevice,
   rotateRoommatePasscode,
   roommateRowToApi,
+  setRoommateRole,
   setVisibility,
   updateRoomName,
   updateRoommateProfile,
@@ -372,6 +374,50 @@ roomRoutes.delete('/:id/roommates/:rid', requireUser, async (c) => {
     metadata: { self: isSelf, removedRole: target.role },
   });
   return c.json({ ok: true });
+});
+
+// ─── POST /api/rooms/:id/roommates/:rid/role ──────────────────────────────
+// Admin only. Promote a member → admin, or demote admin → member. The
+// last admin can't demote themselves; the server returns 409 instead
+// of leaving a room with zero admins.
+
+roomRoutes.post('/:id/roommates/:rid/role', requireUser, async (c) => {
+  const roomId = c.req.param('id');
+  const rid = c.req.param('rid');
+  const me = await requireAdmin(c, roomId);
+
+  const target = await getRoommate(c.env.DB, rid);
+  if (!target || target.room_id !== roomId) throw new HttpError(404, 'roommate_not_found');
+
+  const { role: newRole } = roleChangeSchema.parse(await c.req.json());
+  const oldRole = target.role;
+
+  // No-op when the role isn't changing — short-circuit before the
+  // guard so a redundant click doesn't false-trip last_admin.
+  if (oldRole === newRole) return c.json({ ok: true, role: newRole });
+
+  // Demoting an admin: make sure another admin remains. Same query
+  // shape as the delete handler's last-admin guard.
+  if (oldRole === 'admin' && newRole === 'member') {
+    const remainingAdmins = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM roommate WHERE room_id = ? AND role = 'admin' AND id != ?`,
+    )
+      .bind(roomId, rid)
+      .first<{ n: number }>();
+    if (!remainingAdmins || remainingAdmins.n < 1) {
+      throw new HttpError(409, 'last_admin');
+    }
+  }
+
+  await setRoommateRole(c.env.DB, rid, newRole);
+  await recordAudit(c.env.DB, {
+    actorUserId: me.userId,
+    roomId,
+    action: 'roommate.role_changed',
+    targetId: rid,
+    metadata: { from: oldRole, to: newRole },
+  });
+  return c.json({ ok: true, role: newRole });
 });
 
 // ─── PATCH /api/rooms/:id/roommates/:rid ──────────────────────────────────
