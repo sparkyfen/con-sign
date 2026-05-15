@@ -132,6 +132,11 @@ deviceRoutes.get('/sign.png', async (c) => {
         width,
         height,
         conDay: computeConDay(conRow?.start_date ?? null),
+        // Visitor URL the QR sidebar encodes. Always the public room
+        // URL — the panel's QR is meant for passersby; per-roommate
+        // share links (with the #k= unlock fragment) live on the
+        // dashboard, not the panel.
+        visitorUrl: `${new URL(c.req.url).origin}/r/${room.qr_slug}`,
       });
     }
   }
