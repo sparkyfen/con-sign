@@ -1,6 +1,7 @@
 # PLAN — TRMNL
 
 Status: **Mode B implemented and hardware-verified on a real 7.5" TRMNL.**
+For step-by-step bring-up, see [`SETUP.md`](./SETUP.md).
 Hardware: 7.5" TRMNL, ESP32-based, 800×480 e-ink, Wi-Fi, battery-powered.
 Polls an HTTPS URL on a configurable interval. See
 [`../protocol.md`](../protocol.md) for the device-agnostic contract that
@@ -297,8 +298,6 @@ overrides). TRMNL adapter picks the format that matches firmware.
 
 ## What's left
 
-- **`docs/devices/trmnl/SETUP.md`**: a how-to written from real
-  pairing experience, for somebody flashing their first panel.
 - **Dashboard UI for pair-code claim**: currently goes through
   `POST /api/rooms/:id/devices/claim` directly (curl). The UI
   affordance for typing in a 6-char code lives in the dashboard
