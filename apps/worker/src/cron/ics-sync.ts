@@ -1,6 +1,7 @@
 import type { Bindings } from '../types.js';
 import { deleteStaleDevices } from '../db/queries.js';
 import { parseIcs, type IcsEvent } from './ics-parse.js';
+import { inferTimezoneFromLocation } from './timezone-from-location.js';
 
 /** Devices silent past this many days are deleted by the daily cron. */
 export const STALE_DEVICE_DAYS = 90;
@@ -49,16 +50,22 @@ export async function runStaleDeviceCleanup(
 }
 
 function upsertStatement(db: D1Database, e: IcsEvent, now: string): D1PreparedStatement {
+  // Best-effort timezone from the free-form location. The COALESCE on
+  // the conflict-update branch means we only ever *fill* a NULL — once
+  // a con has a timezone (whether derived here previously or set by
+  // hand for an exceptional case), repeat syncs leave it alone.
+  const derivedTz = inferTimezoneFromLocation(e.location);
   return db
     .prepare(
-      `INSERT INTO con (id, ics_uid, name, start_date, end_date, location, url, source_updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO con (id, ics_uid, name, start_date, end_date, location, url, timezone, source_updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (ics_uid) DO UPDATE SET
          name = excluded.name,
          start_date = excluded.start_date,
          end_date = excluded.end_date,
          location = excluded.location,
          url = excluded.url,
+         timezone = COALESCE(con.timezone, excluded.timezone),
          source_updated_at = excluded.source_updated_at`,
     )
     .bind(
@@ -69,6 +76,7 @@ function upsertStatement(db: D1Database, e: IcsEvent, now: string): D1PreparedSt
       e.endDate,
       e.location,
       e.url,
+      derivedTz,
       now,
     );
 }
