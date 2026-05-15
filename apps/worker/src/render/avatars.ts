@@ -12,16 +12,22 @@
  * a missing avatar to break the whole panel.
  */
 export async function fetchAvatarDataUri(url: string): Promise<string | null> {
+  // BSky CDN defaults to image/webp, which resvg-wasm can't decode. The
+  // CDN supports format coercion via an `@<fmt>` suffix on the blob CID;
+  // forcing @jpeg gives us something resvg's image-jpeg feature does
+  // know how to read.
+  const fetchUrl = coerceBskyJpeg(url);
+
   let cached: Response | null = null;
   const haveCache = typeof caches !== 'undefined';
-  const cacheKey = haveCache ? new Request(url, { method: 'GET' }) : null;
+  const cacheKey = haveCache ? new Request(fetchUrl, { method: 'GET' }) : null;
   if (haveCache && cacheKey) {
     cached = (await caches.default.match(cacheKey)) ?? null;
   }
 
   let res: Response;
   try {
-    res = cached ?? (await fetch(url, { cf: { cacheTtl: 86400, cacheEverything: true } }));
+    res = cached ?? (await fetch(fetchUrl, { cf: { cacheTtl: 86400, cacheEverything: true } }));
   } catch {
     return null;
   }
@@ -48,4 +54,19 @@ export async function fetchAvatarDataUri(url: string): Promise<string | null> {
     bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return `data:${contentType};base64,${btoa(bin)}`;
+}
+
+function coerceBskyJpeg(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (parsed.hostname !== 'cdn.bsky.app') return url;
+  // BSky paths look like /img/avatar/plain/<did>/<cid>[@<fmt>]. If a
+  // format suffix is already present, respect it; otherwise pin to jpeg.
+  if (/@[a-z]+$/i.test(parsed.pathname)) return url;
+  parsed.pathname = `${parsed.pathname}@jpeg`;
+  return parsed.toString();
 }
