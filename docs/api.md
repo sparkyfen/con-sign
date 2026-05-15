@@ -280,9 +280,11 @@ Response: `DeviceList` —
 ```
 
 ### `DELETE /api/rooms/:id/devices/:deviceId` *(admin required)*
-Sets `revoked_at` on the device row; the panel's next poll renders the
-"PANEL UNPAIRED" screen. Re-pairing requires the admin to delete the row
-entirely (no API for that yet — open question if needed).
+Sets `revoked_at` and clears `last_seen_at` on the device row. The panel's
+*next* poll renders the "PANEL UNPAIRED" notice once; the poll after that
+self-heals into the unpaired+pair-code screen (admin re-claims through the
+normal flow). Re-revoke wipes `last_seen_at` again so the notice rotates
+back in for one more poll. `revoked_at` itself stays set as an audit trail.
 Response: `{ ok: true }`.
 
 ## TRMNL adapter (commercial-firmware device)

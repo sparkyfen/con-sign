@@ -19,7 +19,7 @@ endpoint are shared.
 
 | Device | Status | Plan |
 |---|---|---|
-| TRMNL (7.5", 800×480) | Backend done; hardware verification pending | [`trmnl/PLAN.md`](./trmnl/PLAN.md) |
+| TRMNL (7.5", 800×480) | Hardware-verified end-to-end | [`trmnl/PLAN.md`](./trmnl/PLAN.md) |
 
 ## Probably later (no plan yet)
 

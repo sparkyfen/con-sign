@@ -62,13 +62,16 @@ device's current row in the `device` table:
 | Server state | Render | What to display |
 |---|---|---|
 | No row | Unpaired panel with a rotating 6-char OTP code | The OTP. Don't store it; it rotates every 5 minutes. |
-| `room_id` set | Paired room sign | Room name, con, day counter, roommates with public-tier fields. |
-| `revoked_at` set | Revoked notice | "Panel unpaired by a room admin." |
+| `room_id` set | Paired room sign | Room name, con (with local clock + day counter), roommates with public-tier fields. |
+| `revoked_at` set, `last_seen_at` NULL | Revoked notice | "Panel unpaired by a room admin." Shown once. |
+| `revoked_at` set, `last_seen_at` non-NULL | Self-healed unpaired | Back to the OTP screen; admin re-claims to recover. |
 
-The state transitions happen via the dashboard (and, for revoke, the
-admin can flip it back to unpaired by clearing both fields). The
-device doesn't participate in the state change — it just fetches and
-renders.
+Revoke is a one-poll-cycle notice: on revoke we clear `last_seen_at`,
+so the first post-revoke poll renders the notice and touches the row;
+every subsequent poll falls through to the unpaired branch so the
+panel never gets stuck on a dead-end screen. `revoked_at` stays set
+forever as an audit trail. The device doesn't participate in the
+state change — it just keeps polling.
 
 ## Poll cadence
 

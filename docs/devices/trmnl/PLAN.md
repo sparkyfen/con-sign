@@ -1,6 +1,6 @@
 # PLAN — TRMNL
 
-Status: **Mode B backend implemented; awaiting hardware verification.**
+Status: **Mode B implemented and hardware-verified on a real 7.5" TRMNL.**
 Hardware: 7.5" TRMNL, ESP32-based, 800×480 e-ink, Wi-Fi, battery-powered.
 Polls an HTTPS URL on a configurable interval. See
 [`../protocol.md`](../protocol.md) for the device-agnostic contract that
@@ -246,14 +246,74 @@ overrides). TRMNL adapter picks the format that matches firmware.
 - `/log` parses JSON body as a record array, extracts
   battery/wifi/firmware fields, writes to the same columns ✅
 
+### 2026-05-15 (hardware verification + panel content polish)
+
+- Successfully paired and re-paired a real 7.5" TRMNL against
+  production multiple times via pair-code OTP (`VV2NNY`, `J333RJ`,
+  `Z492LT`, `K3Y62M`). ✅
+- **1-bit grayscale PNG encoder** (`render/png1.ts`): hand-rolled
+  PNG with `bit_depth=1` + `color_type=0`. TRMNL firmware ≥1.5.2
+  rejects the 8-bit RGBA output `Resvg.asPng()` produced; this
+  takes resvg's raw RGBA buffer and packs it correctly. ~3-5 KB
+  per panel render. ✅
+- **Floyd–Steinberg dithering** before threshold so photographic
+  content (avatars) stipples instead of crushing to black blobs.
+  Text/UI edges stay crisp because resvg outputs near-pure
+  black/white there with little AA fringe for FS to push around. ✅
+- **Avatars on each row**: fetch each roommate's projected
+  `avatarUrl` in parallel, inline as base64 `data:` URI inside an
+  `<image>` tag, let resvg composite. No hosting — BSky CDN URLs
+  are pulled direct (forcing `@jpeg` suffix since BSky defaults
+  to `image/webp` and resvg-wasm lacks a webp decoder); Telegram
+  bot-fetch goes through our existing `/api/avatar/tg/...` proxy.
+  Edge-cached by URL. 72×72 slot with a 2px border. ✅
+- **Status pill variants + duration + 24h stale-clear**: `room`
+  filled black, `lobby`/`dealers`/`panels`/custom outlined,
+  `out`/`asleep` dashed-outlined (no grays — dashes binarize
+  cleanly). Pill appends compact elapsed time (e.g. `ASLEEP · 2h14m`)
+  and disappears entirely once the status is >24 h old. ✅
+- **Con-local time**: new `con.timezone` IANA column
+  (`Europe/Brussels`, etc., nullable). When set, header shows a
+  24-hour wall clock under DAY 0N; DAY itself rolls at con-local
+  midnight instead of UTC. Workers' built-in `Intl.DateTimeFormat`
+  with full ICU does the conversion — no tz database needed. ✅
+- **Revoke self-heal**: revoke is a one-poll-cycle notice. We
+  clear `last_seen_at` on revoke so the first post-revoke poll
+  shows the notice and touches the row; subsequent polls fall
+  through to the unpaired+pair-code screen. Re-revoke wipes
+  `last_seen_at` again. Solves the dead-end where revoked panels
+  used to need direct D1 access to recover. ✅
+- **TRMNL `filename` cache-bust on state transitions**: the
+  `/api/display` envelope's filename now embeds the device's
+  render state (`p`/`r`/`u`) alongside the time bucket, so any
+  paired ↔ revoked ↔ unpaired transition forces the device to
+  refetch inside the current bucket instead of holding the prior
+  cached image. Without this, a revoke that landed mid-bucket
+  was invisible to the panel. ✅
+- **Auto-populate roommate handles**: identity rows' BSky /
+  Telegram handles get copied onto `roommate.bsky_handle` /
+  `telegram_handle` at insert time, plus a one-shot backfill
+  migration for any pre-existing rows. ✅
+
 ## What's left
 
-- **Hardware verification**: flash a TRMNL with BYOS firmware pointing at
-  `cons.social/api/trmnl`, watch the unpaired-OTP screen appear, claim
-  via the dashboard (or D1 until the dashboard ships), confirm paired
-  sign renders correctly on real e-ink.
-- **`docs/devices/trmnl/SETUP.md`**: written from real pairing experience.
-- **BMP1 encoder**: conditional. Only needed if the TRMNL firmware
-  version on the actual unit rejects PNG.
-- **Audit log writes** for `trmnl.setup` (first-seen) and friends — small
+- **`docs/devices/trmnl/SETUP.md`**: a how-to written from real
+  pairing experience, for somebody flashing their first panel.
+- **Dashboard UI for pair-code claim**: currently goes through
+  `POST /api/rooms/:id/devices/claim` directly (curl). The UI
+  affordance for typing in a 6-char code lives in the dashboard
+  build, not here.
+- **BMP1 encoder**: probably no longer needed. PNG works on real
+  hardware. Leave parked unless we hit a firmware variant that
+  insists on BMP.
+- **Audit log writes** for `trmnl.setup` (first-seen) — small
   follow-up if useful for forensics.
+- **Plex Serif font bundle** for mockup-parity typography on the
+  room name, header clock, and "More" headline. Functional in
+  Plex Mono / sans for now.
+- **Region-masked dithering**: only worth pursuing if real-panel
+  text on the e-ink shows visible noise from the whole-frame FS
+  pass. Hasn't been observed in PNG previews, may not happen.
+- **Admin UI for setting `con.timezone`**: currently set via
+  `wrangler d1 execute` against prod. Per-con form field in the
+  dashboard's con picker would close this.
