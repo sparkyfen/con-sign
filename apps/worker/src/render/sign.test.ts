@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeConDay, renderSignSvg } from './sign.js';
+import { computeConDay, formatConClock, renderSignSvg } from './sign.js';
 import type { ProjectedRoommate } from '@con-sign/shared';
 
 describe('computeConDay', () => {
@@ -26,6 +26,36 @@ describe('computeConDay', () => {
   it('still returns a number after the con ends — caller decides whether to show it', () => {
     // Rooms presumably get torn down post-con; we don't clamp here.
     expect(computeConDay('2026-06-01', new Date('2026-06-30T00:00:00Z'))).toBe(30);
+  });
+
+  it('uses con-local date when a timezone is provided', () => {
+    // 2026-06-01T03:00:00Z is still 2026-05-31 in Los Angeles (-07h DST).
+    // Without tz: UTC says Day 1. With tz: con hasn't started yet.
+    const t = new Date('2026-06-01T03:00:00Z');
+    expect(computeConDay('2026-06-01', t)).toBe(1);
+    expect(computeConDay('2026-06-01', t, 'America/Los_Angeles')).toBeNull();
+  });
+
+  it('advances to day 2 once midnight passes in the con-local zone', () => {
+    // 2026-06-02T02:00:00Z is 2026-06-01 22:00 in LA — still Day 1.
+    // 2026-06-02T08:00:00Z is 2026-06-02 01:00 in LA — now Day 2.
+    expect(computeConDay('2026-06-01', new Date('2026-06-02T02:00:00Z'), 'America/Los_Angeles')).toBe(1);
+    expect(computeConDay('2026-06-01', new Date('2026-06-02T08:00:00Z'), 'America/Los_Angeles')).toBe(2);
+  });
+});
+
+describe('formatConClock', () => {
+  it('returns null when no timezone is provided', () => {
+    expect(formatConClock(new Date(), null)).toBeNull();
+    expect(formatConClock(new Date(), undefined)).toBeNull();
+    expect(formatConClock(new Date(), '')).toBeNull();
+  });
+
+  it('formats HH:MM 24-hour in the given timezone', () => {
+    // 2026-05-14T13:05:00Z = 15:05 in Brussels (CEST UTC+2)
+    expect(formatConClock(new Date('2026-05-14T13:05:00Z'), 'Europe/Brussels')).toBe('15:05');
+    // Same instant in LA = 06:05
+    expect(formatConClock(new Date('2026-05-14T13:05:00Z'), 'America/Los_Angeles')).toBe('06:05');
   });
 });
 
@@ -162,8 +192,10 @@ describe('renderSignSvg avatars', () => {
       fetchAvatar: async () => dataUri,
     });
     expect(svg).toContain(`href="${dataUri}"`);
-    // Text shifts to padding (24) + avatarSize (56) + gap (8) = 88.
-    expect(svg).toMatch(/<text x="88"[^>]*>Sparky</);
+    // Text shifts to padding (24) + avatarSize (72) + gap (8) = 104.
+    expect(svg).toMatch(/<text x="104"[^>]*>Sparky</);
+    // Avatar slot is wrapped in a 2px black border rect.
+    expect(svg).toMatch(/<rect[^>]+width="72"[^>]+height="72"[^>]+stroke="black"/);
   });
 
   it('omits <image> and keeps text at the default left margin when the fetcher returns null', async () => {

@@ -112,9 +112,11 @@ deviceRoutes.get('/sign.png', async (c) => {
       const room = await getRoom(c.env.DB, device.room_id!);
       if (!room) throw new HttpError(404, 'room_not_found');
 
-      const conRow = await c.env.DB.prepare('SELECT name, start_date FROM con WHERE id = ?')
+      const conRow = await c.env.DB.prepare(
+        'SELECT name, start_date, timezone FROM con WHERE id = ?',
+      )
         .bind(room.con_id)
-        .first<{ name: string | null; start_date: string | null }>();
+        .first<{ name: string | null; start_date: string | null; timezone: string | null }>();
 
       const rows = await listRoommatesForRoom(c.env.DB, room.id);
       const projected = await Promise.all(
@@ -131,7 +133,8 @@ deviceRoutes.get('/sign.png', async (c) => {
         roommates: projected,
         width,
         height,
-        conDay: computeConDay(conRow?.start_date ?? null),
+        conDay: computeConDay(conRow?.start_date ?? null, new Date(), conRow?.timezone ?? null),
+        conTimezone: conRow?.timezone ?? null,
         // Visitor URL the QR sidebar encodes. Always the public room
         // URL — the panel's QR is meant for passersby; per-roommate
         // share links (with the #k= unlock fragment) live on the

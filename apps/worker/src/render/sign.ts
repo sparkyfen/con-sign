@@ -5,19 +5,62 @@ import { fetchAvatarDataUri } from './avatars.js';
 /**
  * Compute "which day of the con is it" given the con's start date.
  *
- * - Both sides are treated as UTC YYYY-MM-DD dates. A real con spans roughly
- *   a long weekend, so timezone slop on the day boundary is fine for the
- *   "DAY 02" glance UI.
+ * - `startDate` is treated as a YYYY-MM-DD calendar date in the con's
+ *   local timezone (`tz`). When `tz` is null/undefined we fall back to
+ *   UTC, which matches the previous behavior.
  * - Returns null if the con hasn't started yet, or if startDate is missing.
  * - Day 1 = the start date itself.
  */
-export function computeConDay(startDate: string | null, now: Date = new Date()): number | null {
+export function computeConDay(
+  startDate: string | null,
+  now: Date = new Date(),
+  tz?: string | null,
+): number | null {
   if (!startDate) return null;
-  const start = Date.parse(`${startDate}T00:00:00Z`);
-  if (Number.isNaN(start)) return null;
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const startParts = startDate.split('-').map(Number);
+  if (startParts.length !== 3 || startParts.some((n) => !Number.isFinite(n))) return null;
+  const start = Date.UTC(startParts[0]!, startParts[1]! - 1, startParts[2]!);
+  const todayYmd = tz ? ymdInTz(now, tz) : ymdInTz(now, 'UTC');
+  const [ty, tm, td] = todayYmd.split('-').map(Number) as [number, number, number];
+  const today = Date.UTC(ty, tm - 1, td);
   if (today < start) return null;
   return Math.floor((today - start) / 86_400_000) + 1;
+}
+
+/**
+ * `YYYY-MM-DD` for `now` in the given IANA timezone. Workers ship full
+ * ICU so any valid IANA name works; invalid names throw at construction
+ * time — callers pass validated values.
+ */
+function ymdInTz(now: Date, tz: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const y = parts.find((p) => p.type === 'year')?.value ?? '1970';
+  const m = parts.find((p) => p.type === 'month')?.value ?? '01';
+  const d = parts.find((p) => p.type === 'day')?.value ?? '01';
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Format the wall clock as 24-hour HH:MM in the given IANA timezone.
+ * Returns null if `tz` is null/empty — the renderer omits the clock in
+ * that case rather than guessing a default.
+ */
+export function formatConClock(now: Date, tz: string | null | undefined): string | null {
+  if (!tz) return null;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const h = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const m = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return `${h}:${m}`;
 }
 
 /**
@@ -42,13 +85,19 @@ export async function renderSignSvg(args: {
    */
   visitorUrl?: string | null;
   /**
+   * IANA timezone for the con. When set, the header shows a wall clock
+   * in this zone; when null/undefined the clock is omitted entirely.
+   */
+  conTimezone?: string | null;
+  /**
    * Injection point for tests. Production passes the real fetcher; the
    * test suite stubs this to avoid hitting the network.
    */
   fetchAvatar?: (url: string) => Promise<string | null>;
 }): Promise<string> {
-  const { roomName, conName, roommates, width, height, conDay, visitorUrl } = args;
+  const { roomName, conName, roommates, width, height, conDay, visitorUrl, conTimezone } = args;
   const fetchAvatar = args.fetchAvatar ?? fetchAvatarDataUri;
+  const clock = formatConClock(new Date(), conTimezone ?? null);
 
   const padding = 24;
   const sidebarW = visitorUrl ? 200 : 0;
@@ -71,12 +120,22 @@ export async function renderSignSvg(args: {
     Math.max(60, Math.floor((height - headerH - padding) / Math.max(1, roommates.length))),
   );
 
-  const dayLabel =
+  // Header right column: DAY 0N on top, big wall clock below. Both
+  // right-align to contentRight so the QR sidebar (when present) frames
+  // them. Mockup uses serif for the clock; we ship sans for now and
+  // can swap once Plex Serif is bundled.
+  const dayText =
     conDay != null && conDay > 0
-      ? `<text x="${contentRight - padding}" y="${roomNameBaselineY}" text-anchor="end"
-              font-size="24" font-weight="700"
-              font-family="ui-sans-serif, system-ui, sans-serif" fill="black">DAY ${String(conDay).padStart(2, '0')}</text>`
+      ? `<text x="${contentRight - padding}" y="${roomNameBaselineY - 28}" text-anchor="end"
+              font-size="18" font-weight="700" letter-spacing="2"
+              font-family="ui-monospace, monospace" fill="black">DAY ${String(conDay).padStart(2, '0')}</text>`
       : '';
+  const clockText = clock
+    ? `<text x="${contentRight - padding}" y="${roomNameBaselineY}" text-anchor="end"
+            font-size="36" font-weight="700"
+            font-family="ui-sans-serif, system-ui, sans-serif" fill="black">${escape(clock)}</text>`
+    : '';
+  const dayLabel = `${dayText}${clockText}`;
 
   const conLine = conName
     ? `<text x="${padding}" y="${conLineBaselineY}" font-size="${conLineFontSize}"
@@ -95,7 +154,7 @@ export async function renderSignSvg(args: {
     roommates.map((r) => (r.avatarUrl ? fetchAvatar(r.avatarUrl) : Promise.resolve(null))),
   );
 
-  const avatarSize = 56;
+  const avatarSize = 72;
   const avatarGap = 8;
 
   const rows = roommates
@@ -110,10 +169,13 @@ export async function renderSignSvg(args: {
       // text-only rows don't sit in a phantom indent.
       const avatarUri = avatarDataUris[i];
       const textX = avatarUri ? padding + avatarSize + avatarGap : padding;
+      const avatarTop = top + (rowH - avatarSize) / 2;
       const avatarTag = avatarUri
-        ? `<image x="${padding}" y="${top + (rowH - avatarSize) / 2}"
+        ? `<image x="${padding}" y="${avatarTop}"
                   width="${avatarSize}" height="${avatarSize}"
-                  preserveAspectRatio="xMidYMid slice" href="${avatarUri}"/>`
+                  preserveAspectRatio="xMidYMid slice" href="${avatarUri}"/>
+          <rect x="${padding}" y="${avatarTop}" width="${avatarSize}" height="${avatarSize}"
+                fill="none" stroke="black" stroke-width="2"/>`
         : '';
 
       const name = r.fursonaName ?? 'Roommate';

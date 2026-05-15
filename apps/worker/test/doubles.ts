@@ -86,6 +86,7 @@ export function createD1(): D1Database {
     '0004_device_mac.sql',
     '0005_device_telemetry.sql',
     '0006_backfill_roommate_handles.sql',
+    '0007_con_timezone.sql',
   ]) {
     sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
   }
