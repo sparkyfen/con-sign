@@ -50,38 +50,58 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
 }
 
 /**
- * Threshold an RGBA pixel to 0 (black) or 1 (white) based on luminance.
- * Standard Rec.709 weights; the constant offset rounds-to-nearest.
+ * Floyd–Steinberg error diffusion. Produces a `width*height` byte array
+ * with 1 = white, 0 = black, distributing each pixel's quantization
+ * error to the right and bottom neighbors:
  *
- * For pixels with reduced alpha (anti-aliased text edges), we still
- * threshold against the original luminance — the SVG renders at full
- * alpha for non-edge pixels, so anti-alias fringes naturally land
- * close to the threshold either way.
+ *           [  *  7/16 ]
+ *   [ 3/16  5/16  1/16 ]
+ *
+ * This gives photo content a proper stippled appearance on 1-bit panels
+ * instead of the dark blob you get from flat thresholding. The cost is
+ * that crisp text/UI edges pick up a little dither noise too — if that
+ * becomes a problem we'll need to mask non-photo regions.
+ *
+ * Float32 luminance buffer (1.5 MB at 800×480) sits well inside the
+ * Workers memory ceiling.
  */
-function isWhite(r: number, g: number, b: number): boolean {
-  // Luminance (Rec.709): 0.2126R + 0.7152G + 0.0722B, scaled by 1000
-  // to stay in integers. Threshold at 128 * 1000 = 128000.
-  return 213 * r + 715 * g + 72 * b > 128000;
+function floydSteinberg(rgba: Uint8Array, width: number, height: number): Uint8Array {
+  const lum = new Float32Array(width * height);
+  for (let p = 0, i = 0; p < width * height; p++, i += 4) {
+    lum[p] = (213 * (rgba[i] ?? 0) + 715 * (rgba[i + 1] ?? 0) + 72 * (rgba[i + 2] ?? 0)) / 1000;
+  }
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const old = lum[idx]!;
+      const next = old > 128 ? 255 : 0;
+      out[idx] = next === 255 ? 1 : 0;
+      const err = old - next;
+      if (x + 1 < width) lum[idx + 1] = lum[idx + 1]! + (err * 7) / 16;
+      if (y + 1 < height) {
+        if (x > 0) lum[idx + width - 1] = lum[idx + width - 1]! + (err * 3) / 16;
+        lum[idx + width] = lum[idx + width]! + (err * 5) / 16;
+        if (x + 1 < width) lum[idx + width + 1] = lum[idx + width + 1]! + (err * 1) / 16;
+      }
+    }
+  }
+  return out;
 }
 
 /**
- * Convert width*height*4 RGBA bytes into raw 1-bit-grayscale PNG
- * scanlines: each row is prefixed with a filter byte (0 = none), then
- * the row's pixels packed 8 to a byte, MSB-first. Returns the
- * scanline buffer ready to be zlib-deflated.
+ * Take a width*height byte array of binary pixels (1=white, 0=black)
+ * and emit PNG scanlines: filter byte per row (0 = none) + pixels
+ * packed 8 to a byte, MSB-first.
  */
-function packScanlines(rgba: Uint8Array, width: number, height: number): Uint8Array {
+function packScanlines(bits: Uint8Array, width: number, height: number): Uint8Array {
   const bytesPerRow = Math.ceil(width / 8);
   const out = new Uint8Array(height * (1 + bytesPerRow));
   for (let y = 0; y < height; y++) {
     const rowStart = y * (1 + bytesPerRow);
     out[rowStart] = 0; // filter: none
     for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      const r = rgba[i] ?? 0;
-      const g = rgba[i + 1] ?? 0;
-      const b = rgba[i + 2] ?? 0;
-      if (isWhite(r, g, b)) {
+      if (bits[y * width + x]) {
         const byteIdx = rowStart + 1 + (x >> 3);
         const bit = 7 - (x & 7);
         out[byteIdx] = (out[byteIdx]! | (1 << bit)) & 0xff;
@@ -132,7 +152,8 @@ export async function encodePng1Bit(
   ihdr[11] = 0; // filter: standard
   ihdr[12] = 0; // interlace: none
 
-  const scanlines = packScanlines(rgba, width, height);
+  const bits = floydSteinberg(rgba, width, height);
+  const scanlines = packScanlines(bits, width, height);
   const idatData = await deflate(scanlines);
 
   const ihdrChunk = chunk('IHDR', ihdr);
