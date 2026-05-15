@@ -120,6 +120,15 @@ trmnlRoutes.get('/display', async (c) => {
     model: c.req.header('MODEL') ?? null,
   });
 
+  // Mirror the routing rule in /api/device/sign.png so the cache-bust
+  // tag matches what we'll actually render on the device's next fetch.
+  const state =
+    found.device.revoked_at && found.device.last_seen_at == null
+      ? 'revoked'
+      : found.device.room_id && !found.device.revoked_at
+        ? 'paired'
+        : 'unpaired';
+
   const envelope = buildDisplayEnvelope({
     deviceId,
     origin: new URL(c.req.url).origin,
@@ -127,6 +136,7 @@ trmnlRoutes.get('/display', async (c) => {
       found.con_start_date && found.con_end_date
         ? { startDate: found.con_start_date, endDate: found.con_end_date }
         : null,
+    state,
     width,
     height,
   });

@@ -11,6 +11,7 @@ describe('buildDisplayEnvelope', () => {
       deviceId: DEVICE,
       origin: 'https://cons.social',
       con: CON,
+      state: 'paired',
       now: NOW,
     });
     expect(env.image_url).toContain('https://cons.social/api/device/sign.png');
@@ -25,6 +26,7 @@ describe('buildDisplayEnvelope', () => {
       deviceId: DEVICE,
       origin: 'https://cons.social',
       con: CON,
+      state: 'paired',
       now: NOW,
     });
     expect(env.refresh_rate).toBe(300); // during-con
@@ -35,6 +37,7 @@ describe('buildDisplayEnvelope', () => {
       deviceId: DEVICE,
       origin: 'https://cons.social',
       con: null,
+      state: 'unpaired',
       now: NOW,
     });
     expect(env.refresh_rate).toBe(300);
@@ -45,12 +48,23 @@ describe('buildDisplayEnvelope', () => {
     const t1 = new Date('2026-07-05T12:04:59Z'); // same 5-min bucket
     const t2 = new Date('2026-07-05T12:05:01Z'); // next 5-min bucket
 
-    const a = buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, now: t0 }).filename;
-    const b = buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, now: t1 }).filename;
-    const c = buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, now: t2 }).filename;
+    const a = buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, state: 'paired', now: t0 }).filename;
+    const b = buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, state: 'paired', now: t1 }).filename;
+    const c = buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, state: 'paired', now: t2 }).filename;
 
     expect(a).toBe(b);
     expect(c).not.toBe(a);
+  });
+
+  it('filename changes across render-state transitions in the same bucket', () => {
+    // Same instant, different states → different filename so the
+    // TRMNL refetches instead of holding a stale cached image.
+    const same = (s: 'paired' | 'revoked' | 'unpaired') =>
+      buildDisplayEnvelope({ deviceId: DEVICE, origin: 'https://cons.social', con: CON, state: s, now: NOW }).filename;
+    const p = same('paired');
+    const r = same('revoked');
+    const u = same('unpaired');
+    expect(new Set([p, r, u]).size).toBe(3);
   });
 
   it('respects custom panel dimensions', () => {
@@ -58,6 +72,7 @@ describe('buildDisplayEnvelope', () => {
       deviceId: DEVICE,
       origin: 'https://cons.social',
       con: CON,
+      state: 'paired',
       now: NOW,
       width: 960,
       height: 540,
