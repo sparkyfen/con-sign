@@ -385,6 +385,61 @@ export interface DeviceRow {
   revoked_at: string | null;
   last_seen_at: string | null;
   created_at: string;
+  mac_address?: string | null;
+  battery_voltage?: number | null;
+  percent_charged?: number | null;
+  rssi?: number | null;
+  fw_version?: string | null;
+  model?: string | null;
+}
+
+/** TRMNL-reported headers on /display, stashed on the device row. */
+export interface DeviceTelemetry {
+  batteryVoltage?: number | null;
+  percentCharged?: number | null;
+  rssi?: number | null;
+  fwVersion?: string | null;
+  model?: string | null;
+}
+
+/**
+ * Upsert telemetry fields for a known device. Only columns whose values
+ * are non-null in the input are touched, so a poll that omits e.g.
+ * battery_voltage doesn't clobber a previously-reported value.
+ */
+export async function updateDeviceTelemetry(
+  db: D1Database,
+  deviceId: string,
+  t: DeviceTelemetry,
+): Promise<void> {
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (t.batteryVoltage != null) {
+    sets.push('battery_voltage = ?');
+    binds.push(t.batteryVoltage);
+  }
+  if (t.percentCharged != null) {
+    sets.push('percent_charged = ?');
+    binds.push(t.percentCharged);
+  }
+  if (t.rssi != null) {
+    sets.push('rssi = ?');
+    binds.push(t.rssi);
+  }
+  if (t.fwVersion) {
+    sets.push('fw_version = ?');
+    binds.push(t.fwVersion);
+  }
+  if (t.model) {
+    sets.push('model = ?');
+    binds.push(t.model);
+  }
+  if (sets.length === 0) return;
+  binds.push(deviceId);
+  await db
+    .prepare(`UPDATE device SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...binds)
+    .run();
 }
 
 /**

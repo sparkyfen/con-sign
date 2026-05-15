@@ -301,8 +301,20 @@ the same MAC (factory-reset) returns the existing api_key so the
 device's audit history doesn't orphan.
 
 ### `GET /api/trmnl/display` *(device bearer)*
-Header: `Access-Token: <api_key>`. Returns TRMNL's expected JSON
-envelope:
+Headers (per the TRMNL BYOS spec):
+- `ID: <MAC>` — required.
+- `ACCESS_TOKEN: <api_key>` — optional, used as the fast-path lookup.
+- Optional telemetry: `BATTERY_VOLTAGE`, `PERCENT_CHARGED`, `RSSI`,
+  `FW_VERSION`, `MODEL`, `WIDTH`, `HEIGHT`. The first five are
+  persisted on the device row when present; `WIDTH`/`HEIGHT` override
+  the default 800×480 in the returned image URL.
+
+If `ACCESS_TOKEN` is present and resolves, it wins. Otherwise the
+server falls back to `ID` (MAC) and lazy-creates the device row if
+needed — so a device that lost its api_key can recover without
+re-running /setup.
+
+Returns TRMNL's expected JSON envelope:
 ```json
 {
   "filename": "sign-<prefix>-<bucket>.png",
@@ -315,10 +327,19 @@ envelope:
 devices get the 5-minute rate so the rotating OTP code stays fresh.
 
 ### `POST /api/trmnl/log` *(device bearer)*
-Header: `Access-Token: <api_key>`. Body: any text (battery state,
-runtime errors, button events). Truncated to 1 KB, stored under
-`trmnl:log:<api_key>` in KV with a 30-day TTL. Useful for incident
-triage. Returns 204.
+Headers: `ID: <MAC>` (primary identifier per the spec) or
+`ACCESS_TOKEN: <api_key>` (alternative).
+Body: a JSON array of log records — each may contain
+`message`, `wifi_status`, `created_at`, `sleep_duration`,
+`refresh_rate`, `free_heap_size`, `max_alloc_size`, `source_path`,
+`wake_reason`, `firmware_version`, `retry`, `battery_voltage`,
+`source_line`, `special_function`, `wifi_signal`.
+
+Stored raw (truncated to 1 KB) under `trmnl:log:<device_id>` in KV
+with a 30-day TTL. Server also best-effort parses each record and
+persists `battery_voltage`, `wifi_signal` (as `rssi`), and
+`firmware_version` to the device row, so telemetry stays consistent
+whether it arrived via /display headers or /log body. Returns 204.
 
 ---
 

@@ -84,6 +84,7 @@ export function createD1(): D1Database {
     '0002_devices.sql',
     '0003_audit_log.sql',
     '0004_device_mac.sql',
+    '0005_device_telemetry.sql',
   ]) {
     sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
   }

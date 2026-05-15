@@ -63,16 +63,24 @@ describe('integration: TRMNL adapter routes', () => {
     expect(a.api_key).not.toBe(b.api_key);
   });
 
-  it('/display rejects requests without Access-Token', async () => {
+  it('/display rejects requests with neither ACCESS_TOKEN nor ID', async () => {
     const ctx = newCtx();
     const r = await call(ctx, 'GET', '/api/trmnl/display');
     expect(r.status).toBe(401);
   });
 
-  it('/display rejects an unknown Access-Token', async () => {
+  it('/display falls back to MAC when ACCESS_TOKEN is missing', async () => {
+    const ctx = newCtx();
+    // First /display ever — the device hasn't stored its api_key yet,
+    // so it sends only ID (MAC). We should lazy-create the device row.
+    const r = await call(ctx, 'GET', '/api/trmnl/display', { headers: { ID: MAC_A } });
+    expect(r.status).toBe(200);
+  });
+
+  it('/display rejects an unknown ACCESS_TOKEN with no fallback MAC', async () => {
     const ctx = newCtx();
     const r = await call(ctx, 'GET', '/api/trmnl/display', {
-      headers: { 'Access-Token': '00000000-0000-0000-0000-000000000000' },
+      headers: { ACCESS_TOKEN: '00000000-0000-0000-0000-000000000000' },
     });
     expect(r.status).toBe(401);
     expect((r.body as { error: string }).error).toBe('unknown_device');
@@ -83,7 +91,7 @@ describe('integration: TRMNL adapter routes', () => {
     const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
       .body as SetupResponse;
     const r = await call(ctx, 'GET', '/api/trmnl/display', {
-      headers: { 'Access-Token': setup.api_key },
+      headers: { 'ACCESS_TOKEN': setup.api_key },
     });
     expect(r.status).toBe(200);
     const body = r.body as DisplayResponse;
@@ -116,7 +124,7 @@ describe('integration: TRMNL adapter routes', () => {
       .run();
 
     const r = await call(ctx, 'GET', '/api/trmnl/display', {
-      headers: { 'Access-Token': setup.api_key },
+      headers: { 'ACCESS_TOKEN': setup.api_key },
     });
     const body = r.body as DisplayResponse;
     // Con ended in 2020; we're now far outside the 7-day window.
@@ -129,17 +137,74 @@ describe('integration: TRMNL adapter routes', () => {
       .body as SetupResponse;
     const r = await call(ctx, 'POST', '/api/trmnl/log', {
       body: { battery: 92, msg: 'hello' },
-      headers: { 'Access-Token': setup.api_key },
+      headers: { 'ACCESS_TOKEN': setup.api_key },
     });
     expect(r.status).toBe(204);
     const stored = await ctx.env.SESSIONS.get(`trmnl:log:${setup.api_key}`);
     expect(stored).toContain('hello');
   });
 
-  it('/log rejects without Access-Token', async () => {
+  it('/log rejects without ACCESS_TOKEN or ID', async () => {
     const ctx = newCtx();
     const r = await call(ctx, 'POST', '/api/trmnl/log', { body: { msg: 'nope' } });
     expect(r.status).toBe(401);
+  });
+
+  it('/log accepts ID (MAC) as the device identifier', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'POST', '/api/trmnl/log', {
+      body: [{ message: 'hello via MAC' }],
+      headers: { ID: MAC_B },
+    });
+    expect(r.status).toBe(204);
+  });
+
+  it('/display stashes battery/rssi/fw_version from request headers', async () => {
+    const ctx = newCtx();
+    const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    await call(ctx, 'GET', '/api/trmnl/display', {
+      headers: {
+        ACCESS_TOKEN: setup.api_key,
+        BATTERY_VOLTAGE: '3.92',
+        PERCENT_CHARGED: '74',
+        RSSI: '-58',
+        FW_VERSION: '1.4.3',
+        MODEL: 'og',
+      },
+    });
+    const row = await ctx.env.DB.prepare('SELECT * FROM device WHERE id = ?')
+      .bind(setup.api_key)
+      .first<{
+        battery_voltage: number;
+        percent_charged: number;
+        rssi: number;
+        fw_version: string;
+        model: string;
+      }>();
+    expect(row?.battery_voltage).toBeCloseTo(3.92);
+    expect(row?.percent_charged).toBe(74);
+    expect(row?.rssi).toBe(-58);
+    expect(row?.fw_version).toBe('1.4.3');
+    expect(row?.model).toBe('og');
+  });
+
+  it('/log parses structured records and extracts telemetry', async () => {
+    const ctx = newCtx();
+    const setup = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))
+      .body as SetupResponse;
+    await call(ctx, 'POST', '/api/trmnl/log', {
+      body: [
+        { message: 'wifi connected', battery_voltage: 3.71, wifi_signal: -67, firmware_version: '1.5.0' },
+      ],
+      headers: { ID: MAC_A },
+    });
+    const row = await ctx.env.DB.prepare('SELECT * FROM device WHERE id = ?')
+      .bind(setup.api_key)
+      .first<{ battery_voltage: number; rssi: number; fw_version: string }>();
+    expect(row?.battery_voltage).toBeCloseTo(3.71);
+    expect(row?.rssi).toBe(-67);
+    expect(row?.fw_version).toBe('1.5.0');
   });
 
   it('CSRF middleware does not require Origin on /api/trmnl/* POSTs', async () => {
@@ -151,7 +216,7 @@ describe('integration: TRMNL adapter routes', () => {
       .body as SetupResponse;
     const r = await call(ctx, 'POST', '/api/trmnl/log', {
       body: { msg: 'hi' },
-      headers: { 'Access-Token': setup.api_key, Origin: '' },
+      headers: { 'ACCESS_TOKEN': setup.api_key, Origin: '' },
     });
     expect(r.status).toBe(204);
   });

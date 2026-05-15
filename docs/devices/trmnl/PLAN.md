@@ -213,7 +213,9 @@ overrides). TRMNL adapter picks the format that matches firmware.
 - Group billing / multi-tenant TRMNL — if we ever support TRMNL
   fleet management for con organisers, that's a separate plan.
 
-## What's done (as of 2026-05-14)
+## What's done
+
+### 2026-05-14 (initial Mode B landing)
 
 - `0004_device_mac.sql` migration ✅
 - PNG render via `@resvg/resvg-wasm` ✅
@@ -228,6 +230,21 @@ overrides). TRMNL adapter picks the format that matches firmware.
 - Integration tests covering setup, display (unpaired + paired), log,
   CSRF carve-out ✅
 - Mode A smoke test against a hand-seeded room ✅
+
+### Spec-compliance pass (after reading terminus/doc/api.adoc)
+
+- `/display` now reads `ACCESS_TOKEN` (the actual spec header — was
+  `Access-Token`, would have 401'd against real hardware) ✅
+- `/display` falls back to `ID` (MAC) for identification when
+  ACCESS_TOKEN is absent ✅
+- `/log` uses `ID` (MAC) primary, `ACCESS_TOKEN` alternative ✅
+- `/display` honors device-reported `WIDTH`/`HEIGHT` headers ✅
+- Migration `0005_device_telemetry.sql` adds nullable
+  `battery_voltage`, `percent_charged`, `rssi`, `fw_version`, `model`
+  columns on `device` ✅
+- `/display` writes those columns from request headers ✅
+- `/log` parses JSON body as a record array, extracts
+  battery/wifi/firmware fields, writes to the same columns ✅
 
 ## What's left
 
