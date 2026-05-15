@@ -105,7 +105,9 @@ export function renderSignSvg(args: {
                   font-family="ui-monospace, monospace" fill="black">${escape(captionParts.join('  ·  '))}</text>`
           : '';
 
-      const pill = r.status?.label ? renderStatusPill(r.status.label, contentRight - padding, top + 32) : '';
+      const pill = r.status?.label
+        ? renderStatusPill(r.status.label, r.status.updatedAt ?? null, contentRight - padding, top + 32)
+        : '';
 
       const divider =
         i < roommates.length - 1
@@ -140,31 +142,95 @@ export function renderSignSvg(args: {
 }
 
 /**
- * Outlined pill anchored to its right edge so the caller can place it
- * against the content-right gutter. Dot indicator + uppercase label,
- * sized to render cleanly at 1-bit (everything is solid black on
- * white, no gradients or anti-aliased fills that binarize badly).
+ * Stale-clear cutoff. Statuses older than this just disappear from the
+ * panel — the assumption is "if they didn't update in a day, the status
+ * isn't telling you anything useful anymore". Render-side only; we leave
+ * the row in the DB so the dashboard, audit log, and /me view still
+ * reflect what the user actually set.
  */
-function renderStatusPill(label: string, rightEdgeX: number, centerY: number): string {
-  const upper = label.toUpperCase();
-  // Estimate width from char count — accurate enough for layout, since
-  // we control the font and size.
+const STATUS_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+const PRESET_VARIANTS: Record<string, 'filled' | 'outlined' | 'away'> = {
+  room: 'filled',
+  lobby: 'outlined',
+  dealers: 'outlined',
+  panels: 'outlined',
+  out: 'away',
+  asleep: 'away',
+};
+
+/**
+ * Pill variants (all 1-bit friendly):
+ *   - filled   → solid black fill, white text  ("ROOM": come on in)
+ *   - outlined → white fill, solid border      (active elsewhere)
+ *   - away     → white fill, dashed border     (out / asleep — diminished)
+ *
+ * No grays. The "away" variant uses a dashed stroke instead of a lighter
+ * fill, since true gray binarizes to noise on the panel.
+ *
+ * Custom statuses (anything not in PRESET_VARIANTS) default to outlined.
+ * Label is uppercased and, if updatedAt is recent enough, suffixed with
+ * an elapsed-time duration (e.g. "ASLEEP · 2h"). Returns '' if the
+ * status went stale past STATUS_STALE_AFTER_MS.
+ */
+function renderStatusPill(
+  label: string,
+  updatedAt: string | null,
+  rightEdgeX: number,
+  centerY: number,
+  now: Date = new Date(),
+): string {
+  const ageMs = updatedAt ? now.getTime() - Date.parse(updatedAt) : null;
+  if (ageMs !== null && Number.isFinite(ageMs) && ageMs > STATUS_STALE_AFTER_MS) {
+    return '';
+  }
+
+  const variant = PRESET_VARIANTS[label.toLowerCase()] ?? 'outlined';
+  const duration = ageMs != null && Number.isFinite(ageMs) ? formatDuration(ageMs) : null;
+  const display = duration ? `${label.toUpperCase()} · ${duration}` : label.toUpperCase();
+
   const charPx = 7.2;
   const padX = 12;
   const dotSize = 4;
-  const labelPx = upper.length * charPx;
+  const labelPx = display.length * charPx;
   const pillW = padX + dotSize * 2 + 6 + labelPx + padX;
   const pillH = 26;
   const x = rightEdgeX - pillW;
   const y = centerY - pillH / 2;
+
+  const isFilled = variant === 'filled';
+  const fill = isFilled ? 'black' : 'white';
+  const textColor = isFilled ? 'white' : 'black';
+  const dotColor = isFilled ? 'white' : 'black';
+  const strokeAttrs =
+    variant === 'away'
+      ? 'stroke="black" stroke-width="1.5" stroke-dasharray="3 2"'
+      : isFilled
+        ? 'stroke="black" stroke-width="1.5"'
+        : 'stroke="black" stroke-width="1.5"';
+
   return `
     <g transform="translate(${x}, ${y})">
       <rect x="0" y="0" width="${pillW}" height="${pillH}" rx="${pillH / 2}" ry="${pillH / 2}"
-            fill="white" stroke="black" stroke-width="1.5"/>
-      <circle cx="${padX + dotSize}" cy="${pillH / 2}" r="${dotSize}" fill="black"/>
+            fill="${fill}" ${strokeAttrs}/>
+      <circle cx="${padX + dotSize}" cy="${pillH / 2}" r="${dotSize}" fill="${dotColor}"/>
       <text x="${padX + dotSize * 2 + 6}" y="${pillH / 2 + 4}" font-size="11" font-weight="700" letter-spacing="1"
-            font-family="ui-monospace, monospace" fill="black">${escape(upper)}</text>
+            font-family="ui-monospace, monospace" fill="${textColor}">${escape(display)}</text>
     </g>`;
+}
+
+/**
+ * Compact human duration for the pill. We never show seconds (the panel
+ * polls at 5 min minimum) and we never show >=24h (the stale-clear
+ * guard above strips the pill entirely before we get here).
+ */
+function formatDuration(ms: number): string {
+  if (ms < 60_000) return 'now';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remMin = minutes % 60;
+  return remMin === 0 ? `${hours}h` : `${hours}h${remMin}m`;
 }
 
 /**
