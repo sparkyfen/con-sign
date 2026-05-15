@@ -135,8 +135,16 @@ export function renderUnpairedSvg(args: {
     <text x="${cx}" y="${cy + 110}" font-size="20">Enter this code at cons.social/pair</text>
     <text x="${cx}" y="${cy + 138}" font-size="20">to link this panel to your room.</text>
   </g>
-  <text x="${cx}" y="${cy + 188}" font-size="14" font-style="italic" font-family="ui-monospace, monospace"
-        fill="#666" text-anchor="middle">Code refreshes every 5 minutes.</text>
+  <!--
+    Footer was previously italic gray (#666, 14pt); both choices look
+    fine in a browser but binarize badly on a 1-bit e-ink panel — italic
+    falls back to upright glyphs (we don't bundle the italic TTF) and
+    #666 thresholds to all-black-or-all-white depending on anti-alias
+    coverage, making the line look noisy. Upright black at 16pt is what
+    actually reads at hotel-room distance.
+  -->
+  <text x="${cx}" y="${cy + 188}" font-size="16" font-family="ui-monospace, monospace"
+        fill="black" text-anchor="middle">Code refreshes every 5 minutes.</text>
 </svg>`;
 }
 
@@ -167,7 +175,8 @@ export function renderRevokedSvg(args: { width: number; height: number }): strin
   </g>
   <g font-family="ui-serif, 'IBM Plex Serif', serif" fill="black" text-anchor="middle">
     <text x="${cx}" y="${cy + 56}" font-size="20">This panel's token has been revoked by a room admin.</text>
-    <text x="${cx}" y="${cy + 96}" font-size="16" font-style="italic" fill="#666">
+    <!-- See unpaired footer comment: drop italic + gray for 1-bit legibility. -->
+    <text x="${cx}" y="${cy + 96}" font-size="16" fill="black">
       To re-pair, visit cons.social/pair or contact your room admin.
     </text>
   </g>
