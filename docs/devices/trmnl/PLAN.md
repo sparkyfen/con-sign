@@ -295,6 +295,12 @@ overrides). TRMNL adapter picks the format that matches firmware.
   Telegram handles get copied onto `roommate.bsky_handle` /
   `telegram_handle` at insert time, plus a one-shot backfill
   migration for any pre-existing rows. ✅
+- **`device.setup` audit row** on first TRMNL contact. Records
+  `target_id = device.id` and stashes the MAC in `metadata_json`.
+  Re-pairs (same MAC → existing UUID) are silent so the table
+  doesn't fill up on reboots. The /display + /log fallback paths
+  that lazy-create on MAC deliberately don't audit; /setup is the
+  canonical first-contact event. ✅
 
 ## What's left
 
@@ -305,8 +311,6 @@ overrides). TRMNL adapter picks the format that matches firmware.
 - **BMP1 encoder**: probably no longer needed. PNG works on real
   hardware. Leave parked unless we hit a firmware variant that
   insists on BMP.
-- **Audit log writes** for `trmnl.setup` (first-seen) — small
-  follow-up if useful for forensics.
 - **Plex Serif font bundle** for mockup-parity typography on the
   room name, header clock, and "More" headline. Functional in
   Plex Mono / sans for now.

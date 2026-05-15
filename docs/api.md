@@ -426,8 +426,12 @@ recall on power users.
 
 Action vocabulary (more may be added without API breakage):
 `room.create`, `room.rename`, `room.invite_created`, `room.member_joined`,
-`room.member_removed`, `device.claim`, `device.revoke`,
+`room.member_removed`, `device.setup`, `device.claim`, `device.revoke`,
 `roommate.passcode_rotated`, `roommate.visibility_changed`.
+
+`device.setup` is system-initiated (device beats any user to first
+contact): `actor_user_id` is `null` and `room_id` is `null`. The
+device's UUID is in `target_id` and the MAC is in `metadata_json`.
 
 ---
 
