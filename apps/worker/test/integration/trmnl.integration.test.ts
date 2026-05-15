@@ -45,6 +45,31 @@ describe('integration: TRMNL adapter routes', () => {
     expect(body.friendly_id).toBe(body.api_key.slice(0, 8).toUpperCase());
   });
 
+  it('/setup writes a device.setup audit row on first contact, but not on re-pair', async () => {
+    const ctx = newCtx();
+    await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } });
+    // Audit table is the source of truth — count rows for this action.
+    const after1 = await ctx.env.DB.prepare(
+      "SELECT COUNT(*) AS n, MAX(metadata_json) AS m FROM audit_log WHERE action = 'device.setup'",
+    ).first<{ n: number; m: string | null }>();
+    expect(after1?.n).toBe(1);
+    expect(after1?.m).toContain(MAC_A);
+
+    // Second /setup with the same MAC is idempotent — no new audit row.
+    await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } });
+    const after2 = await ctx.env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'device.setup'",
+    ).first<{ n: number }>();
+    expect(after2?.n).toBe(1);
+
+    // A different MAC = a different first contact = another audit row.
+    await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_B } });
+    const after3 = await ctx.env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'device.setup'",
+    ).first<{ n: number }>();
+    expect(after3?.n).toBe(2);
+  });
+
   it('/setup returns the same api_key on re-pair (factory reset survives)', async () => {
     const ctx = newCtx();
     const first = (await call(ctx, 'GET', '/api/trmnl/setup', { headers: { ID: MAC_A } }))

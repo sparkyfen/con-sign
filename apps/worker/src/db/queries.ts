@@ -453,19 +453,19 @@ export async function updateDeviceTelemetry(
 export async function getOrCreateDeviceByMac(
   db: D1Database,
   macAddress: string,
-): Promise<string> {
+): Promise<{ id: string; created: boolean }> {
   const existing = await db
     .prepare('SELECT id FROM device WHERE mac_address = ?')
     .bind(macAddress)
     .first<{ id: string }>();
-  if (existing) return existing.id;
+  if (existing) return { id: existing.id, created: false };
 
   const id = newId();
   await db
     .prepare('INSERT INTO device (id, mac_address) VALUES (?, ?)')
     .bind(id, macAddress)
     .run();
-  return id;
+  return { id, created: true };
 }
 
 /**

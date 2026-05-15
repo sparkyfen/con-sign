@@ -19,6 +19,7 @@ import {
   updateDeviceTelemetry,
 } from '../../db/queries.js';
 import { buildDisplayEnvelope } from '../../trmnl/adapter.js';
+import { recordAudit } from '../../db/audit.js';
 
 export const trmnlRoutes = new Hono<Env>();
 
@@ -54,7 +55,19 @@ trmnlRoutes.get('/setup', async (c) => {
     throw new HttpError(400, 'invalid_mac', 'ID header must be a colon-separated MAC');
   }
 
-  const deviceId = await getOrCreateDeviceByMac(c.env.DB, mac);
+  const { id: deviceId, created } = await getOrCreateDeviceByMac(c.env.DB, mac);
+  if (created) {
+    // First-contact forensics: no actor user (the device beat any human
+    // to the punch) and no room yet, but we record the MAC so an admin
+    // can correlate the device's UUID to a physical panel later.
+    await recordAudit(c.env.DB, {
+      actorUserId: null,
+      roomId: null,
+      action: 'device.setup',
+      targetId: deviceId,
+      metadata: { mac },
+    });
+  }
   return c.json({
     status: 200,
     api_key: deviceId,
@@ -96,8 +109,12 @@ trmnlRoutes.get('/display', async (c) => {
   if (!deviceId && mac && macRegex.test(mac)) {
     // No ACCESS_TOKEN, or it didn't resolve — fall back to MAC. Lazy-
     // create on first contact so a device that lost its api_key can
-    // recover without going through /setup again.
-    deviceId = await getOrCreateDeviceByMac(c.env.DB, mac);
+    // recover without going through /setup again. We don't audit
+    // here; /setup is the canonical first-contact event, and a
+    // device that bypassed it and landed on /display first is rare
+    // enough that we'd rather log the anomaly via wrangler tail than
+    // pollute the audit table.
+    ({ id: deviceId } = await getOrCreateDeviceByMac(c.env.DB, mac));
   }
   if (!deviceId) throw new HttpError(401, 'unknown_device');
 
@@ -163,7 +180,7 @@ trmnlRoutes.post('/log', async (c) => {
   let deviceId: string | null = null;
   if (apiKey) deviceId = apiKey;
   else if (mac && macRegex.test(mac)) {
-    deviceId = await getOrCreateDeviceByMac(c.env.DB, mac);
+    ({ id: deviceId } = await getOrCreateDeviceByMac(c.env.DB, mac));
   }
   if (!deviceId) throw new HttpError(401, 'unknown_device');
 

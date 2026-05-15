@@ -23,6 +23,7 @@ export const AUDIT_ACTIONS = [
   'room.invite_created',
   'room.member_joined',
   'room.member_removed',
+  'device.setup',
   'device.claim',
   'device.revoke',
   'roommate.passcode_rotated',
@@ -31,7 +32,12 @@ export const AUDIT_ACTIONS = [
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export interface AuditWrite {
-  actorUserId: string;
+  /**
+   * The user who performed the action, or null for system/device-initiated
+   * events (e.g. `device.setup` — the device contacts us before any user
+   * is involved). The `actor_user_id` column is nullable to match.
+   */
+  actorUserId: string | null;
   roomId: string | null;
   action: AuditAction;
   targetId?: string | null;
