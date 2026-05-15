@@ -125,7 +125,7 @@ deviceRoutes.get('/sign.png', async (c) => {
         }),
       );
 
-      svg = renderSignSvg({
+      svg = await renderSignSvg({
         roomName: room.name,
         conName: conRow?.name ?? null,
         roommates: projected,

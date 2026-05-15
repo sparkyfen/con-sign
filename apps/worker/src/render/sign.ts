@@ -1,5 +1,6 @@
 import type { ProjectedRoommate } from '@con-sign/shared';
 import QRCode from 'qrcode';
+import { fetchAvatarDataUri } from './avatars.js';
 
 /**
  * Compute "which day of the con is it" given the con's start date.
@@ -27,7 +28,7 @@ export function computeConDay(startDate: string | null, now: Date = new Date()):
  * SVG output here is already enough for any device that can rasterize SVG
  * locally (most modern Pi-class drivers can; some ESP32 firmware can't).
  */
-export function renderSignSvg(args: {
+export async function renderSignSvg(args: {
   roomName: string;
   conName?: string | null;
   roommates: ProjectedRoommate[];
@@ -40,8 +41,14 @@ export function renderSignSvg(args: {
    * uses the full width for roommates (legacy / test-only path).
    */
   visitorUrl?: string | null;
-}): string {
+  /**
+   * Injection point for tests. Production passes the real fetcher; the
+   * test suite stubs this to avoid hitting the network.
+   */
+  fetchAvatar?: (url: string) => Promise<string | null>;
+}): Promise<string> {
   const { roomName, conName, roommates, width, height, conDay, visitorUrl } = args;
+  const fetchAvatar = args.fetchAvatar ?? fetchAvatarDataUri;
 
   const padding = 24;
   const sidebarW = visitorUrl ? 200 : 0;
@@ -82,6 +89,15 @@ export function renderSignSvg(args: {
   //           fields only; omit the whole line if none present).
   //   right edge: status pill (rounded rect + dot + label), absent when
   //           no status set or status is hidden.
+  // Resolve avatars in parallel up front. Each entry is the inline data:
+  // URI (success) or null (no URL, fetch failure, non-image content-type).
+  const avatarDataUris = await Promise.all(
+    roommates.map((r) => (r.avatarUrl ? fetchAvatar(r.avatarUrl) : Promise.resolve(null))),
+  );
+
+  const avatarSize = 56;
+  const avatarGap = 8;
+
   const rows = roommates
     .map((r, i) => {
       const top = headerH + i * rowH;
@@ -89,6 +105,16 @@ export function renderSignSvg(args: {
       const captionY = top + 50;
       const nameSize = 22;
       const captionSize = 12;
+
+      // Per-row left edge: bumped right when an avatar resolved, so
+      // text-only rows don't sit in a phantom indent.
+      const avatarUri = avatarDataUris[i];
+      const textX = avatarUri ? padding + avatarSize + avatarGap : padding;
+      const avatarTag = avatarUri
+        ? `<image x="${padding}" y="${top + (rowH - avatarSize) / 2}"
+                  width="${avatarSize}" height="${avatarSize}"
+                  preserveAspectRatio="xMidYMid slice" href="${avatarUri}"/>`
+        : '';
 
       const name = r.fursonaName ?? 'Roommate';
       const handle = r.bskyHandle
@@ -101,7 +127,7 @@ export function renderSignSvg(args: {
       );
       const caption =
         captionParts.length > 0
-          ? `<text x="${padding}" y="${captionY}" font-size="${captionSize}"
+          ? `<text x="${textX}" y="${captionY}" font-size="${captionSize}"
                   font-family="ui-monospace, monospace" fill="black">${escape(captionParts.join('  ·  '))}</text>`
           : '';
 
@@ -115,7 +141,8 @@ export function renderSignSvg(args: {
           : '';
 
       return `
-        <text x="${padding}" y="${nameY}" font-size="${nameSize}" font-weight="700"
+        ${avatarTag}
+        <text x="${textX}" y="${nameY}" font-size="${nameSize}" font-weight="700"
               font-family="ui-sans-serif, system-ui, sans-serif" fill="black">${escape(name)}</text>
         ${caption}
         ${pill}

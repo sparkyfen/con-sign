@@ -30,8 +30,8 @@ describe('computeConDay', () => {
 });
 
 describe('renderSignSvg DAY label', () => {
-  it('omits DAY label when conDay is null', () => {
-    const svg = renderSignSvg({
+  it('omits DAY label when conDay is null', async () => {
+    const svg = await renderSignSvg({
       roomName: 'Room 1842',
       roommates: [],
       width: 800,
@@ -41,8 +41,8 @@ describe('renderSignSvg DAY label', () => {
     expect(svg).not.toContain('DAY');
   });
 
-  it('renders DAY 0N zero-padded for single-digit days', () => {
-    const svg = renderSignSvg({
+  it('renders DAY 0N zero-padded for single-digit days', async () => {
+    const svg = await renderSignSvg({
       roomName: 'Room 1842',
       roommates: [],
       width: 800,
@@ -52,8 +52,8 @@ describe('renderSignSvg DAY label', () => {
     expect(svg).toContain('DAY 02');
   });
 
-  it('does not zero-pad two-digit days', () => {
-    const svg = renderSignSvg({
+  it('does not zero-pad two-digit days', async () => {
+    const svg = await renderSignSvg({
       roomName: 'Room 1842',
       roommates: [],
       width: 800,
@@ -73,7 +73,10 @@ function baseRoom(extra: Partial<ProjectedRoommate> = {}): ProjectedRoommate {
   };
 }
 
-function renderWith(status: ProjectedRoommate['status'], now = '2026-05-14T12:00:00Z'): string {
+async function renderWith(
+  status: ProjectedRoommate['status'],
+  now = '2026-05-14T12:00:00Z',
+): Promise<string> {
   // The renderer reads the wall clock for duration. Patch Date temporarily.
   const RealDate = Date;
   const fixed = new RealDate(now).getTime();
@@ -87,7 +90,7 @@ function renderWith(status: ProjectedRoommate['status'], now = '2026-05-14T12:00
   }
   (globalThis as { Date: typeof Date }).Date = FixedDate as unknown as typeof Date;
   try {
-    return renderSignSvg({
+    return await renderSignSvg({
       roomName: 'R',
       roommates: [baseRoom({ status })],
       width: 800,
@@ -99,44 +102,102 @@ function renderWith(status: ProjectedRoommate['status'], now = '2026-05-14T12:00
 }
 
 describe('renderSignSvg status pill', () => {
-  it('renders the "room" preset as a filled black pill with white text', () => {
-    const svg = renderWith({ label: 'room', updatedAt: '2026-05-14T11:55:00Z' });
+  it('renders the "room" preset as a filled black pill with white text', async () => {
+    const svg = await renderWith({ label: 'room', updatedAt: '2026-05-14T11:55:00Z' });
     expect(svg).toContain('fill="black"'); // pill background
     expect(svg).toContain('fill="white">ROOM');
   });
 
-  it('renders mid-energy presets (lobby/dealers/panels) as outlined', () => {
-    const svg = renderWith({ label: 'lobby', updatedAt: '2026-05-14T11:50:00Z' });
+  it('renders mid-energy presets (lobby/dealers/panels) as outlined', async () => {
+    const svg = await renderWith({ label: 'lobby', updatedAt: '2026-05-14T11:50:00Z' });
     expect(svg).toContain('stroke="black"');
     expect(svg).not.toContain('stroke-dasharray');
     expect(svg).toContain('>LOBBY');
   });
 
-  it('renders away presets (out/asleep) with a dashed border', () => {
-    const svg = renderWith({ label: 'asleep', updatedAt: '2026-05-14T10:00:00Z' });
+  it('renders away presets (out/asleep) with a dashed border', async () => {
+    const svg = await renderWith({ label: 'asleep', updatedAt: '2026-05-14T10:00:00Z' });
     expect(svg).toContain('stroke-dasharray="3 2"');
     expect(svg).toContain('>ASLEEP');
   });
 
-  it('falls back to outlined for custom statuses', () => {
-    const svg = renderWith({ label: 'grabbing tea', updatedAt: '2026-05-14T11:30:00Z' });
+  it('falls back to outlined for custom statuses', async () => {
+    const svg = await renderWith({ label: 'grabbing tea', updatedAt: '2026-05-14T11:30:00Z' });
     expect(svg).not.toContain('stroke-dasharray');
     expect(svg).toContain('GRABBING TEA');
   });
 
-  it('appends an elapsed-time duration when updatedAt is recent', () => {
-    const svg = renderWith({ label: 'asleep', updatedAt: '2026-05-14T09:46:00Z' });
+  it('appends an elapsed-time duration when updatedAt is recent', async () => {
+    const svg = await renderWith({ label: 'asleep', updatedAt: '2026-05-14T09:46:00Z' });
     expect(svg).toMatch(/ASLEEP · 2h14m/);
   });
 
-  it('omits the pill entirely once the status is older than 24h', () => {
-    const svg = renderWith({ label: 'asleep', updatedAt: '2026-05-13T11:00:00Z' });
+  it('omits the pill entirely once the status is older than 24h', async () => {
+    const svg = await renderWith({ label: 'asleep', updatedAt: '2026-05-13T11:00:00Z' });
     expect(svg).not.toContain('ASLEEP');
   });
 
-  it('renders the pill without a duration when updatedAt is missing', () => {
-    const svg = renderWith({ label: 'room' });
+  it('renders the pill without a duration when updatedAt is missing', async () => {
+    const svg = await renderWith({ label: 'room' });
     expect(svg).toContain('>ROOM<');
     expect(svg).not.toMatch(/ROOM · /);
+  });
+});
+
+describe('renderSignSvg avatars', () => {
+  it('embeds an inline <image> tag and shifts text right when the fetcher returns a data URI', async () => {
+    const dataUri = 'data:image/png;base64,AAAA';
+    const svg = await renderSignSvg({
+      roomName: 'R',
+      roommates: [
+        {
+          id: 'r1',
+          role: 'admin',
+          fursonaName: 'Sparky',
+          avatarUrl: 'https://cdn.bsky.app/img/avatar/plain/did/x@jpeg',
+        },
+      ],
+      width: 800,
+      height: 480,
+      fetchAvatar: async () => dataUri,
+    });
+    expect(svg).toContain(`href="${dataUri}"`);
+    // Text shifts to padding (24) + avatarSize (56) + gap (8) = 88.
+    expect(svg).toMatch(/<text x="88"[^>]*>Sparky</);
+  });
+
+  it('omits <image> and keeps text at the default left margin when the fetcher returns null', async () => {
+    const svg = await renderSignSvg({
+      roomName: 'R',
+      roommates: [
+        {
+          id: 'r1',
+          role: 'admin',
+          fursonaName: 'Sparky',
+          avatarUrl: 'https://cdn.bsky.app/img/missing.jpg',
+        },
+      ],
+      width: 800,
+      height: 480,
+      fetchAvatar: async () => null,
+    });
+    expect(svg).not.toContain('<image');
+    expect(svg).toMatch(/<text x="24"[^>]*>Sparky</);
+  });
+
+  it('does not invoke the fetcher when the roommate has no avatarUrl', async () => {
+    let calls = 0;
+    const svg = await renderSignSvg({
+      roomName: 'R',
+      roommates: [{ id: 'r1', role: 'admin', fursonaName: 'Sparky' }],
+      width: 800,
+      height: 480,
+      fetchAvatar: async () => {
+        calls++;
+        return null;
+      },
+    });
+    expect(calls).toBe(0);
+    expect(svg).not.toContain('<image');
   });
 });
