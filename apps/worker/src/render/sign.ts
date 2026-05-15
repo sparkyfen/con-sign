@@ -59,9 +59,14 @@ export function renderSignSvg(args: {
         </g>`
       : '';
 
+  // Con name in solid black, not gray. Visual hierarchy comes from
+  // font weight (room name 700 vs con line 400) and size — both of
+  // which 1-bit e-ink renders cleanly. Gray fill would binarize to
+  // the same speckled "thin black on white" failure mode we hit on
+  // the unpaired-panel footer.
   const conLine = conName
     ? `<text x="${padding}" y="${conLineBaselineY}" font-size="${conLineFontSize}"
-            font-family="ui-sans-serif, system-ui, sans-serif" font-weight="400" fill="#555">
+            font-family="ui-sans-serif, system-ui, sans-serif" font-weight="400" fill="black">
         ${escape(conName)}
       </text>`
     : '';
