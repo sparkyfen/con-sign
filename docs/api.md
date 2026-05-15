@@ -290,8 +290,15 @@ Response: `{ ok: true }`.
 These exist only to speak the URL paths + JSON shapes TRMNL's stock
 BYOS firmware hardcodes. The underlying state machine and image
 dispatch are shared with the generic `/api/device/sign.png` route.
-CSRF Origin check skips `/api/trmnl/*` since the device isn't a
-browser; auth is the `Access-Token` header / `ID` MAC header.
+CSRF Origin check skips them (the device isn't a browser; auth is the
+`ID` MAC header and/or `ACCESS_TOKEN` bearer).
+
+**Path mounts.** Each TRMNL endpoint is reachable at two paths:
+- `/api/trmnl/{setup,display,log}` — explicit namespace, what custom
+  firmware or scripted callers should use.
+- `/api/{setup,display,log}` — alias at the API root, what TRMNL
+  stock firmware hardcodes. Set "Custom Server" in the captive portal
+  to `https://cons.social` (no path) and the firmware finds it.
 
 ### `GET /api/trmnl/setup` *(MAC handshake)*
 Header: `ID: <MAC>` (colon-separated, e.g. `AA:BB:CC:11:22:33`).

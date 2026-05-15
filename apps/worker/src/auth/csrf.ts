@@ -26,7 +26,12 @@ import { HttpError } from '../errors.js';
  * header (e.g. TRMNL's Access-Token). Embedded devices don't send
  * Origin and the CSRF threat model doesn't apply to them.
  */
-const DEVICE_ADAPTER_PATH_PREFIX = '/api/trmnl/';
+const DEVICE_ADAPTER_EXEMPT_PATHS = new Set([
+  '/api/log', // TRMNL firmware's hardcoded log path (root alias)
+]);
+const DEVICE_ADAPTER_EXEMPT_PREFIXES = [
+  '/api/trmnl/', // explicit TRMNL adapter namespace
+];
 
 export const csrfOriginCheck: MiddlewareHandler<Env> = async (c, next) => {
   const method = c.req.method.toUpperCase();
@@ -36,7 +41,10 @@ export const csrfOriginCheck: MiddlewareHandler<Env> = async (c, next) => {
   }
 
   const path = new URL(c.req.url).pathname;
-  if (path.startsWith(DEVICE_ADAPTER_PATH_PREFIX)) {
+  if (
+    DEVICE_ADAPTER_EXEMPT_PATHS.has(path) ||
+    DEVICE_ADAPTER_EXEMPT_PREFIXES.some((p) => path.startsWith(p))
+  ) {
     await next();
     return;
   }

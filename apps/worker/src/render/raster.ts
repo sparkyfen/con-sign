@@ -15,6 +15,7 @@ import { Resvg, initWasm } from '@resvg/resvg-wasm';
 import wasm from '@resvg/resvg-wasm/index_bg.wasm';
 import plexMonoRegular from './fonts/IBMPlexMono-Regular.ttf';
 import plexMonoBold from './fonts/IBMPlexMono-Bold.ttf';
+import { encodePng1Bit } from './png1.js';
 
 let inited: Promise<void> | null = null;
 const ready = (): Promise<void> => {
@@ -31,10 +32,20 @@ const ready = (): Promise<void> => {
 // wrong metrics — fine for the smoke test, fix when it matters.
 const FONT_BUFFERS = [new Uint8Array(plexMonoRegular), new Uint8Array(plexMonoBold)];
 
+/**
+ * Render SVG to 1-bit grayscale PNG.
+ *
+ * TRMNL firmware ≥1.5.2 (and other e-ink devices that read the panel's
+ * native pixel buffer) wants `bit_depth=1, color_type=0`. resvg-wasm
+ * itself only emits 8-bit RGBA via `asPng()`, so we go through raw
+ * pixels and frame the PNG ourselves — see ./png1.ts. Browsers render
+ * 1-bit grayscale PNGs fine, so manual smoke-tests via the URL still
+ * look correct.
+ */
 export async function renderPng(
   svg: string,
   width: number,
-  _height: number,
+  height: number,
 ): Promise<Uint8Array> {
   await ready();
   const resvg = new Resvg(svg, {
@@ -55,5 +66,15 @@ export async function renderPng(
       sansSerifFamily: 'IBM Plex Mono',
     },
   });
-  return resvg.render().asPng();
+  const rendered = resvg.render();
+  // pixels() is RGBA in resvg's image buffer; width/height come back
+  // from the rendered output rather than what we asked for in case
+  // resvg scaled the SVG differently than expected.
+  return encodePng1Bit(rendered.pixels, rendered.width, rendered.height);
 }
+
+// `height` is part of the public API even though resvg ignores it
+// (we fit-to-width and resvg derives height from the SVG aspect ratio).
+// Kept for future explicit fit-to-height calls.
+void renderPng; // keep the lint happy if `height` arg goes unread
+

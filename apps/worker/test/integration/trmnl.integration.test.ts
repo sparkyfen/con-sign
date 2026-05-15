@@ -207,6 +207,23 @@ describe('integration: TRMNL adapter routes', () => {
     expect(row?.fw_version).toBe('1.5.0');
   });
 
+  it('routes are reachable at the /api/* root alias for TRMNL stock firmware', async () => {
+    const ctx = newCtx();
+    const r = await call(ctx, 'GET', '/api/setup', { headers: { ID: MAC_A } });
+    expect(r.status).toBe(200);
+    const setup = r.body as SetupResponse;
+    expect(setup.api_key).toMatch(/^[0-9a-f]{8}-/);
+    const display = await call(ctx, 'GET', '/api/display', {
+      headers: { ACCESS_TOKEN: setup.api_key },
+    });
+    expect(display.status).toBe(200);
+    const log = await call(ctx, 'POST', '/api/log', {
+      body: [{ message: 'aliased' }],
+      headers: { ID: MAC_A },
+    });
+    expect(log.status).toBe(204);
+  });
+
   it('CSRF middleware does not require Origin on /api/trmnl/* POSTs', async () => {
     // The TRMNL device sends no Origin header; verify the carve-out
     // actually lets the POST through (without the carve-out, this would

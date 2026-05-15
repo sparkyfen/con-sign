@@ -74,6 +74,12 @@ app.route('/api/r', visitorRoutes);
 app.route('/api/rooms', roomRoutes);
 app.route('/api/device', deviceRoutes);
 app.route('/api/trmnl', trmnlRoutes);
+// Aliases at the API root for TRMNL stock firmware, which hardcodes
+// `<base-url>/api/setup`, `/api/display`, `/api/log` paths. Same
+// handlers, just reachable without the /trmnl prefix so users can
+// configure their captive-portal "Custom Server" field as
+// `https://cons.social` and have it Just Work.
+app.route('/api', trmnlRoutes);
 app.route('/api/parties', partyRoutes);
 
 app.notFound((c) => c.json({ error: 'not_found' }, 404));
