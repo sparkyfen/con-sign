@@ -223,6 +223,71 @@ describe('integration: device endpoint (pair-code flow)', () => {
     expect(ids2).toEqual([DEVICE_B]);
   });
 
+  it('self-heals a revoked device into the unpaired+pair-code screen on the next poll', async () => {
+    const { ctx, roomId } = await setupRoom();
+    const dev = newCtx();
+    Object.assign(dev.env, ctx.env);
+
+    // Pair, revoke.
+    await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${DEVICE_A}` } });
+    const code1 = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code: code1 } });
+    await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
+
+    // First post-revoke poll: revoke notice.
+    const poll1 = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(poll1.body).toContain('PANEL UNPAIRED');
+    expect(poll1.body).not.toContain('PAIRING CODE');
+
+    // Second poll: self-heal — pair code instead of the notice.
+    const poll2 = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(poll2.body).toContain('PAIRING CODE');
+    expect(poll2.body).not.toContain('PANEL UNPAIRED');
+
+    // The new pair code is reclaimable; revoked_at gets cleared on
+    // claim and the device returns to paired state.
+    const code2 = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    expect(code2).toBeTruthy();
+    const claim = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code: code2 } });
+    expect(claim.status).toBe(200);
+    const poll3 = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(poll3.body).not.toContain('PAIRING CODE');
+    expect(poll3.body).not.toContain('PANEL UNPAIRED');
+  });
+
+  it('re-revoke after a self-heal shows the notice one more time', async () => {
+    const { ctx, roomId } = await setupRoom();
+    const dev = newCtx();
+    Object.assign(dev.env, ctx.env);
+
+    await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${DEVICE_A}` } });
+    const code = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code } });
+    // Revoke #1, consume the notice, self-heal.
+    await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
+    await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${DEVICE_A}` } });
+    const healed = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(healed.body).toContain('PAIRING CODE');
+
+    // Re-pair so we can revoke again.
+    const code2 = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
+    await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code: code2 } });
+    // Revoke #2 — should show the notice exactly once more.
+    await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
+    const reRevoked = await call(dev, 'GET', '/api/device/sign.png', {
+      headers: { Authorization: `Bearer ${DEVICE_A}` },
+    });
+    expect(reRevoked.body).toContain('PANEL UNPAIRED');
+  });
+
   it('refuses to revoke a device from a different room', async () => {
     const { ctx, roomId } = await setupRoom();
     // Pair DEVICE_A to roomId.

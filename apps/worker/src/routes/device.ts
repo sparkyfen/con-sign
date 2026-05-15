@@ -95,14 +95,26 @@ deviceRoutes.get('/sign.png', async (c) => {
 
   const device = await getDevice(c.env.DB, deviceId);
 
+  // Revoke is a one-poll-cycle notice: the corridor sees "panel
+  // unpaired" once, then the device self-heals to the unpaired+pair-code
+  // screen so no admin has to remember to manually reset it. `revokeDevice`
+  // wipes `last_seen_at`, so the first post-revoke poll sees it NULL
+  // (notice shown) and `touchDevice` sets it; subsequent polls see a
+  // populated `last_seen_at` and route through the unpaired branch. The
+  // audit trail keeps the revocation record either way.
+  const revokedAlreadyShown =
+    !!device?.revoked_at && device.last_seen_at != null;
+
   let svg: string;
-  // Unpaired (no row, or row exists but neither paired nor revoked — the
-  // re-pair-after-revoke transition leaves a row with both fields cleared).
-  if (!device || (!device.room_id && !device.revoked_at)) {
+  if (!device || (!device.room_id && !device.revoked_at) || revokedAlreadyShown) {
+    // Unpaired: no row yet, OR row exists with both fields cleared
+    // (post-claim transition), OR row is revoked but already displayed
+    // the notice. Touch the row (when present) so the next state
+    // change has a fresh last_seen_at to compare against.
+    if (device) await touchDevice(c.env.DB, deviceId);
     const code = await getOrCreatePairCode(c.env.SESSIONS, deviceId);
     svg = renderUnpairedSvg({ pairCode: code, width, height });
   } else {
-    // Touch last_seen for any device the server already knows about.
     await touchDevice(c.env.DB, deviceId);
 
     if (device.revoked_at) {

@@ -547,11 +547,18 @@ export async function claimDevice(
   return ((result.meta as { changes?: number }).changes ?? 0) > 0;
 }
 
-/** Revoke a device. Clears the room link so future polls render the
- * "panel unpaired" notice instead of a stale paired view. */
+/**
+ * Revoke a device. Clears `room_id` so the panel stops rendering the
+ * room view, and clears `last_seen_at` so the renderer can tell whether
+ * the revoke notice has already been displayed: the first post-revoke
+ * poll sees `last_seen_at IS NULL` and shows the notice, then touches
+ * the row — subsequent polls find `last_seen_at` non-null and self-heal
+ * to the unpaired+pair-code screen. Re-revoke nulls it again, so the
+ * notice rotates back in for one more poll.
+ */
 export async function revokeDevice(db: D1Database, deviceId: string): Promise<void> {
   await db
-    .prepare('UPDATE device SET room_id = NULL, revoked_at = ? WHERE id = ?')
+    .prepare('UPDATE device SET room_id = NULL, revoked_at = ?, last_seen_at = NULL WHERE id = ?')
     .bind(new Date().toISOString(), deviceId)
     .run();
 }
