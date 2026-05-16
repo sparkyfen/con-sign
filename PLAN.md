@@ -310,6 +310,55 @@ edit own visibility.
 - Identity-tied ACLs (replace/augment passcode tier with allowlists keyed off
   `identity`).
 
+**Stretch — multi-room / multi-con UX (selected from 2026-05-16 brainstorm):**
+
+- **Roommate-to-roommate notes.** Shared in-room scratchpad visible
+  only to logged-in roommates of the room — never to visitors, never
+  on the panel. New table `room_note (id, room_id, author_user_id,
+  body, created_at)` with ~280 char body cap and a cap of ~20 entries
+  per room (oldest TTLs out). Reads + writes gated by
+  `requireRoommate`. Members can delete their own entries; admins
+  can delete any. No panel surface; this is dashboard-only.
+- **Room template.** Per-admin reusable bundle of room shape +
+  invitee list. "Save as template" snapshots the current room
+  (name pattern, roommate user_id list, default per-field
+  visibility, default status presets) into a `room_template`
+  table; "Create room from template" picks a con and instantiates
+  the room + sends invites to the same handles. Snapshot
+  semantics — editing the template doesn't mutate live rooms.
+  Composes with **Carry-over profile** below: template knows
+  *who*, carry-over knows *what each person looks like*.
+- **Carry-over profile.** Per-USER, not per-room. When a user
+  joins any new room, the roommate row pre-populates from their
+  most recent roommate row in any prior room — fursona name /
+  species / pronouns, status presets, per-field visibility
+  defaults, avatar choice. Distinct from room template (which
+  knows the invitees, not the profiles). No new schema; extend
+  the `addRoommate` insert to look up the most recent prior
+  roommate row by `user_id` and copy the profile fields, the
+  same way migration 0006 already does for handles.
+- **Admin notifications.** Per-admin alerts on conditions like
+  panel offline >2 h *during the con window*, battery <15%,
+  `last_seen_at` stale >24 h, repeated failed claim attempts.
+  Per-admin preferences (kind + threshold + quiet hours in
+  con-local TZ). Delivery via **Telegram bot DM** at v1 (we
+  already have `TG_BOT_TOKEN` + Bot API plumbing); email lands
+  later when we add an SMTP provider. New tables
+  `notification_pref` and `notification_log`. Cron checks room +
+  device state on a 10-min cadence during the con window, then
+  reverts to the standard daily ICS cron rhythm.
+- **Virtual guest book.** After a visitor unlocks a roommate's
+  card via passcode, they're offered a "sign the guest book"
+  prompt — short message + handle (their logged-in
+  BSky/Telegram handle if present, otherwise typed plaintext).
+  New table `guest_book_entry (id, room_id, visitor_identity_id
+  NULL, display_handle, message, created_at)`. Default
+  visibility: roommates only (dashboard view); optional toggle
+  to "show to other visitors of this room." Same per-cookie
+  rate limit as unlock attempts. Panel optionally shows a
+  numeric `N visitors today` count (no names) at the admin's
+  discretion.
+
 **Code-quality follow-ups (from simplification reviews):**
 
 - **N+1 roommate projection** — `routes/visitor.ts` + `routes/device.ts`
