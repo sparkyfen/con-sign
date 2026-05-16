@@ -9,6 +9,7 @@ import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import {
   buildCookie,
+  isSecureRequest,
   newUnlockSession,
   readCookie,
   signSession,
@@ -41,7 +42,7 @@ async function getOrSetVisitorId(c: Context<Env>): Promise<{
   return {
     id,
     setCookie: buildCookie(VISITOR_ID_COOKIE, id, {
-      secure: new URL(c.req.url).protocol === 'https:',
+      secure: isSecureRequest(c),
       maxAgeSec: VISITOR_ID_TTL_SEC,
     }),
   };
@@ -202,7 +203,7 @@ visitorRoutes.post('/:slug/unlock', async (c) => {
   const token = await signSession(session, c.env.SESSION_HMAC);
   headers.push(
     buildCookie(unlockCookieName(room.id), token, {
-      secure: new URL(c.req.url).protocol === 'https:',
+      secure: isSecureRequest(c),
       maxAgeSec: session.exp - session.iat,
       path: `/api/r/${slug}`,
     }),

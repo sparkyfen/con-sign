@@ -14,8 +14,8 @@ async function seedIdentity(
   args: { userId: string; provider: 'bsky' | 'telegram'; providerId: string; handle: string },
 ): Promise<void> {
   await ctx.env.DB.prepare(
-    `INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url, raw_profile_json)
-     VALUES (?, ?, ?, ?, ?, NULL, '{}')`,
+    `INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url)
+     VALUES (?, ?, ?, ?, ?, NULL)`,
   )
     .bind(crypto.randomUUID(), args.userId, args.provider, args.providerId, args.handle)
     .run();

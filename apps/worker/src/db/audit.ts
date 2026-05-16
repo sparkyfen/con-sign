@@ -85,40 +85,46 @@ export async function recordAudit(db: D1Database, args: AuditWrite): Promise<voi
  * `+`, `/`, and `=` characters from standard base64 — clients can drop
  * the cursor into a URL query string without calling encodeURIComponent,
  * and we don't lose padding to URL parsers that strip `=`.
- *
- * decodeCursor also accepts legacy standard-base64 cursors (single
- * deploy with `+`/`/`/`=`) so any in-flight client doesn't 404 the
- * moment we ship this; safe to remove once that's no longer a concern.
  */
+import type { AuditEntry } from '@con-sign/shared';
+
+/**
+ * Map a raw `audit_log` row into the API-facing `AuditEntry` shape. Both
+ * audit listing routes consume this; the only difference between them
+ * is which filter column is used to fetch the rows.
+ */
+export function auditRowToEntry(r: AuditRow): AuditEntry {
+  return {
+    id: r.id,
+    actorUserId: r.actor_user_id,
+    roomId: r.room_id,
+    action: r.action as AuditEntry['action'],
+    targetId: r.target_id,
+    metadata: r.metadata_json ? (JSON.parse(r.metadata_json) as Record<string, unknown>) : null,
+    at: r.at,
+  };
+}
+
 export interface AuditCursor {
   at: string;
   id: string;
 }
 
 export function encodeCursor(c: AuditCursor): string {
-  return base64urlEncode(JSON.stringify(c));
+  return btoa(JSON.stringify(c)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
 export function decodeCursor(s: string): AuditCursor | null {
   try {
-    const v = JSON.parse(base64urlDecode(s)) as Partial<AuditCursor>;
+    let b64 = s.replaceAll('-', '+').replaceAll('_', '/');
+    const pad = b64.length % 4;
+    if (pad) b64 += '='.repeat(4 - pad);
+    const v = JSON.parse(atob(b64)) as Partial<AuditCursor>;
     if (typeof v.at === 'string' && typeof v.id === 'string') return { at: v.at, id: v.id };
     return null;
   } catch {
     return null;
   }
-}
-
-function base64urlEncode(s: string): string {
-  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-}
-
-function base64urlDecode(s: string): string {
-  // Tolerate both base64url and legacy standard base64 input.
-  let normalized = s.replaceAll('-', '+').replaceAll('_', '/');
-  const pad = normalized.length % 4;
-  if (pad) normalized += '='.repeat(4 - pad);
-  return atob(normalized);
 }
 
 export interface AuditPage {

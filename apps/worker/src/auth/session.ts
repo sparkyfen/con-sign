@@ -106,6 +106,15 @@ export async function isRevoked(kv: KVNamespace, jti: string): Promise<boolean> 
 
 // ─── cookie helpers ────────────────────────────────────────────────────────
 
+/**
+ * `true` when the incoming request was served over HTTPS. Cookie-Secure
+ * decisions need to track this — local `wrangler dev` uses HTTP, prod
+ * is always HTTPS. Centralized so every call site agrees.
+ */
+export function isSecureRequest(c: { req: { url: string } }): boolean {
+  return new URL(c.req.url).protocol === 'https:';
+}
+
 export interface CookieOptions {
   secure: boolean;
   maxAgeSec: number;

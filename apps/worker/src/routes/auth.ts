@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE,
   buildCookie,
   clearCookie,
+  isSecureRequest,
   newUserSession,
   readCookie,
   revokeSession,
@@ -109,7 +110,6 @@ authRoutes.get('/bsky/callback', async (c) => {
       handle: profile.handle ?? null,
       avatarUrl: profile.avatar ?? null,
       displayName: profile.displayName || profile.handle || `bsky-${did.slice(-8)}`,
-      rawProfile: profile,
       linkToUserId,
     });
   } catch (err) {
@@ -128,7 +128,7 @@ authRoutes.get('/bsky/callback', async (c) => {
   c.header(
     'Set-Cookie',
     buildCookie(SESSION_COOKIE, token, {
-      secure: url.protocol === 'https:',
+      secure: isSecureRequest(c),
       maxAgeSec: session.exp - session.iat,
     }),
   );
@@ -162,7 +162,6 @@ authRoutes.post('/telegram/callback', async (c) => {
       // are served live via /api/avatar/tg/:id which hits the Bot API.
       avatarUrl: null,
       displayName: displayName || `tg-${parsed.id}`,
-      rawProfile: parsed,
       linkToUserId,
     });
   } catch (err) {
@@ -181,7 +180,7 @@ authRoutes.post('/telegram/callback', async (c) => {
   c.header(
     'Set-Cookie',
     buildCookie(SESSION_COOKIE, token, {
-      secure: new URL(c.req.url).protocol === 'https:',
+      secure: isSecureRequest(c),
       maxAgeSec: session.exp - session.iat,
     }),
   );
@@ -221,7 +220,7 @@ authRoutes.post('/logout', async (c) => {
   }
   c.header(
     'Set-Cookie',
-    clearCookie(SESSION_COOKIE, { secure: new URL(c.req.url).protocol === 'https:' }),
+    clearCookie(SESSION_COOKIE, { secure: isSecureRequest(c) }),
   );
   return c.json({ ok: true });
 });

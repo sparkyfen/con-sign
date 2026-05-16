@@ -10,10 +10,11 @@ import type { FieldVisibility, Tier } from '@con-sign/shared';
 const newId = (): string => crypto.randomUUID();
 
 const SLUG_ALPHABET = 'abcdefghjkmnpqrstvwxyz23456789';
-export const newQrSlug = (len = 10): string => {
-  const bytes = crypto.getRandomValues(new Uint8Array(len));
+const SLUG_LEN = 10;
+export const newQrSlug = (): string => {
+  const bytes = crypto.getRandomValues(new Uint8Array(SLUG_LEN));
   let out = '';
-  for (let i = 0; i < len; i++) out += SLUG_ALPHABET[(bytes[i] ?? 0) % SLUG_ALPHABET.length];
+  for (let i = 0; i < SLUG_LEN; i++) out += SLUG_ALPHABET[(bytes[i] ?? 0) % SLUG_ALPHABET.length];
   return out;
 };
 
@@ -32,7 +33,6 @@ export interface IdentityRow {
   provider_id: string;
   handle: string | null;
   avatar_url: string | null;
-  raw_profile_json: string | null;
 }
 
 /**
@@ -75,7 +75,6 @@ export async function upsertIdentity(
     handle: string | null;
     avatarUrl: string | null;
     displayName: string;
-    rawProfile: unknown;
     /** Active session's user_id, if the call is part of a link-account flow. */
     linkToUserId?: string | undefined;
   },
@@ -96,16 +95,9 @@ export async function upsertIdentity(
     }
     await db
       .prepare(
-        'UPDATE identity SET handle = ?, avatar_url = ?, raw_profile_json = ? ' +
-          'WHERE provider = ? AND provider_id = ?',
+        'UPDATE identity SET handle = ?, avatar_url = ? WHERE provider = ? AND provider_id = ?',
       )
-      .bind(
-        args.handle,
-        args.avatarUrl,
-        JSON.stringify(args.rawProfile),
-        args.provider,
-        args.providerId,
-      )
+      .bind(args.handle, args.avatarUrl, args.provider, args.providerId)
       .run();
     return existing.user_id;
   }
@@ -114,8 +106,8 @@ export async function upsertIdentity(
   if (args.linkToUserId) {
     await db
       .prepare(
-        'INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url, raw_profile_json) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url) ' +
+          'VALUES (?, ?, ?, ?, ?, ?)',
       )
       .bind(
         newId(),
@@ -124,7 +116,6 @@ export async function upsertIdentity(
         args.providerId,
         args.handle,
         args.avatarUrl,
-        JSON.stringify(args.rawProfile),
       )
       .run();
     return args.linkToUserId;
@@ -137,18 +128,10 @@ export async function upsertIdentity(
     db.prepare('INSERT INTO user (id, display_name) VALUES (?, ?)').bind(userId, args.displayName),
     db
       .prepare(
-        'INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url, raw_profile_json) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO identity (id, user_id, provider, provider_id, handle, avatar_url) ' +
+          'VALUES (?, ?, ?, ?, ?, ?)',
       )
-      .bind(
-        identityId,
-        userId,
-        args.provider,
-        args.providerId,
-        args.handle,
-        args.avatarUrl,
-        JSON.stringify(args.rawProfile),
-      ),
+      .bind(identityId, userId, args.provider, args.providerId, args.handle, args.avatarUrl),
   ]);
   return userId;
 }
@@ -556,11 +539,26 @@ export async function claimDevice(
  * to the unpaired+pair-code screen. Re-revoke nulls it again, so the
  * notice rotates back in for one more poll.
  */
-export async function revokeDevice(db: D1Database, deviceId: string): Promise<void> {
-  await db
-    .prepare('UPDATE device SET room_id = NULL, revoked_at = ?, last_seen_at = NULL WHERE id = ?')
-    .bind(new Date().toISOString(), deviceId)
+/**
+ * Returns true when a matching row was updated. The caller passes the
+ * room id along with the device id so a stray request from one room's
+ * admin can't revoke a device that lives in a different room — the
+ * WHERE clause does the cross-tenancy check in the same round-trip
+ * that performs the update.
+ */
+export async function revokeDevice(
+  db: D1Database,
+  roomId: string,
+  deviceId: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      'UPDATE device SET room_id = NULL, revoked_at = ?, last_seen_at = NULL ' +
+        'WHERE id = ? AND room_id = ?',
+    )
+    .bind(new Date().toISOString(), deviceId, roomId)
     .run();
+  return ((result.meta as { changes?: number }).changes ?? 0) > 0;
 }
 
 /**

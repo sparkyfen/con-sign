@@ -7,3 +7,4 @@ export * from './schemas/roommate.js';
 export * from './schemas/unlock.js';
 export * from './schemas/visibility.js';
 export { projectRoommate } from './privacy.js';
+export { BASE_HEADERS, CSP_HEADER } from './security-headers.js';

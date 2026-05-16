@@ -14,7 +14,7 @@ describe('integration: identity linking via upsertIdentity', () => {
       handle: 'fresh.bsky.social',
       avatarUrl: null,
       displayName: 'Fresh',
-      rawProfile: {},
+
     });
     expect(userId).toBeTruthy();
     const u = await ctx.env.DB.prepare('SELECT id FROM user WHERE id = ?').bind(userId).first();
@@ -29,7 +29,7 @@ describe('integration: identity linking via upsertIdentity', () => {
       handle: 'repeat.bsky.social',
       avatarUrl: null,
       displayName: 'Repeat',
-      rawProfile: {},
+
     });
     const second = await upsertIdentity(ctx.env.DB, {
       provider: 'bsky',
@@ -37,7 +37,7 @@ describe('integration: identity linking via upsertIdentity', () => {
       handle: 'repeat.bsky.social',
       avatarUrl: 'https://example.invalid/new.jpg',
       displayName: 'Repeat',
-      rawProfile: {},
+
     });
     expect(second).toBe(first);
   });
@@ -52,7 +52,7 @@ describe('integration: identity linking via upsertIdentity', () => {
       handle: 'tg_new',
       avatarUrl: null,
       displayName: 'TG',
-      rawProfile: {},
+
       linkToUserId: USER_A,
     });
     expect(linked).toBe(USER_A);
@@ -87,7 +87,7 @@ describe('integration: identity linking via upsertIdentity', () => {
       handle: 'me',
       avatarUrl: null,
       displayName: 'me',
-      rawProfile: {},
+
       linkToUserId: USER_A,
     });
     expect(result).toBe(USER_A);
@@ -111,7 +111,7 @@ describe('integration: identity linking via upsertIdentity', () => {
         handle: 'b',
         avatarUrl: null,
         displayName: 'b',
-        rawProfile: {},
+
         linkToUserId: USER_A,
       }),
     ).rejects.toBeInstanceOf(IdentityCollisionError);

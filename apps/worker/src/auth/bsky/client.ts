@@ -42,13 +42,9 @@ type SerializedSession = Omit<Session, 'dpopKey'> & {
 };
 
 /**
- * Load every signing key the Worker should publish.
- *
- * Accepts two secret shapes for backwards compat with the original deploy:
- *   - `BSKY_PRIVATE_JWKS`: JSON array of private JWKs (preferred). The
- *     first entry signs; all entries publish.
- *   - `BSKY_PRIVATE_JWK`: single JSON-encoded private JWK (legacy). Used
- *     iff BSKY_PRIVATE_JWKS is unset.
+ * Load every signing key the Worker should publish from `BSKY_PRIVATE_JWKS`
+ * — a JSON array of private JWKs. The first entry signs; all entries
+ * publish on `/jwks.json`.
  *
  * Rotation procedure:
  *   1. Mint a new key with `pnpm run keygen:bsky`.
@@ -61,9 +57,8 @@ type SerializedSession = Omit<Session, 'dpopKey'> & {
  *   4. Drop the old key on the next deploy.
  */
 async function loadKeyset(env: Bindings): Promise<JoseKey[]> {
-  const raw = env.BSKY_PRIVATE_JWKS ?? (env.BSKY_PRIVATE_JWK ? `[${env.BSKY_PRIVATE_JWK}]` : null);
-  if (!raw) return [];
-  const parsed = JSON.parse(raw) as JWK[];
+  if (!env.BSKY_PRIVATE_JWKS) return [];
+  const parsed = JSON.parse(env.BSKY_PRIVATE_JWKS) as JWK[];
   if (!Array.isArray(parsed)) {
     throw new Error('BSKY_PRIVATE_JWKS must decode to an array of JWKs');
   }
@@ -87,14 +82,14 @@ function withAlg(jwk: JWK): JWK {
  * Build the OAuth client. Call once per request — the OAuth library itself is
  * stateless; persistence lives in the KV stores we wire here.
  *
- * `BSKY_PRIVATE_JWK` is a JSON-encoded private JWK (ES256). Generated once
- * via `pnpm --filter @con-sign/worker run keygen:bsky` and pasted into
- * `wrangler secret put BSKY_PRIVATE_JWK`.
+ * Keys come from `BSKY_PRIVATE_JWKS` (JSON array of ES256 JWKs). Mint
+ * with `pnpm --filter @con-sign/worker run keygen:bsky` and set via
+ * `wrangler secret put BSKY_PRIVATE_JWKS`.
  */
 export async function createBskyClient(env: Bindings): Promise<OAuthClient> {
   const keyset = await loadKeyset(env);
   if (keyset.length === 0) {
-    throw new Error('No BSKY signing key configured (set BSKY_PRIVATE_JWKS or BSKY_PRIVATE_JWK)');
+    throw new Error('No BSKY signing key configured (set BSKY_PRIVATE_JWKS)');
   }
 
   return new OAuthClient({

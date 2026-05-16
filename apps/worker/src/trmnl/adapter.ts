@@ -23,10 +23,6 @@ export interface TrmnlDisplayEnvelope {
   filename: string;
   image_url: string;
   refresh_rate: number;
-  reset_firmware?: boolean;
-  update_firmware?: boolean;
-  firmware_url?: string;
-  special_function?: string;
 }
 
 export type DeviceRenderState = 'paired' | 'revoked' | 'unpaired';

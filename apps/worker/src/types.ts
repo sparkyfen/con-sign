@@ -14,8 +14,6 @@ export interface Bindings {
 
   // secrets
   SESSION_HMAC: string;
-  /** Legacy single private JWK. Wrapped into a 1-element array if BSKY_PRIVATE_JWKS is unset. */
-  BSKY_PRIVATE_JWK?: string;
   /** JSON array of private JWKs (ES256). First key signs; all publish on /jwks.json. */
   BSKY_PRIVATE_JWKS?: string;
   TG_BOT_TOKEN: string;
@@ -28,8 +26,6 @@ export interface Bindings {
 export interface Variables {
   /** Set by the auth middleware when an admin/roommate session is valid. */
   userId?: string;
-  /** Set by the device middleware when a bearer token matches a room. */
-  deviceRoomId?: string;
   /** Set by the visitor middleware: roommate IDs the viewer has unlocked. */
   unlockedRoommateIds?: string[];
 }

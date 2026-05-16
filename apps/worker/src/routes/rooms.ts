@@ -48,8 +48,8 @@ import {
   updateRoommateProfile,
 } from '../db/queries.js';
 import { consumePairCode } from '../auth/pair-code.js';
-import { decodeCursor, listAuditForRoom, recordAudit, type AuditRow } from '../db/audit.js';
-import { auditQuerySchema, type AuditEntry, type AuditList } from '@con-sign/shared';
+import { auditRowToEntry, decodeCursor, listAuditForRoom, recordAudit } from '../db/audit.js';
+import { auditQuerySchema, type AuditList } from '@con-sign/shared';
 
 export const roomRoutes = new Hono<Env>();
 
@@ -77,17 +77,27 @@ async function requireAdmin(
 
 const origin = (c: Context<Env>): string => new URL(c.req.url).origin;
 
-const rowToEntry = (r: AuditRow): AuditEntry => ({
-  id: r.id,
-  actorUserId: r.actor_user_id,
-  roomId: r.room_id,
-  action: r.action as AuditEntry['action'],
-  targetId: r.target_id,
-  metadata: r.metadata_json
-    ? (JSON.parse(r.metadata_json) as Record<string, unknown>)
-    : null,
-  at: r.at,
-});
+/**
+ * Reject role-changes / removals that would leave a room with zero
+ * admins. The same guard is used by both the role-change endpoint
+ * (demoting the last admin) and the delete-roommate endpoint
+ * (removing the last admin).
+ */
+async function assertNotLastAdmin(
+  db: D1Database,
+  roomId: string,
+  excludeRoommateId: string,
+): Promise<void> {
+  const remaining = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM roommate WHERE room_id = ? AND role = 'admin' AND id != ?`,
+    )
+    .bind(roomId, excludeRoommateId)
+    .first<{ n: number }>();
+  if (!remaining || remaining.n < 1) {
+    throw new HttpError(409, 'last_admin');
+  }
+}
 
 // ─── POST /api/rooms ──────────────────────────────────────────────────────
 // Create a room. Caller becomes the first admin roommate. A personal
@@ -234,7 +244,10 @@ roomRoutes.get('/:id/audit', requireUser, async (c) => {
   const q = auditQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
   const cursor = q.cursor ? decodeCursor(q.cursor) : null;
   const page = await listAuditForRoom(c.env.DB, roomId, { limit: q.limit, cursor });
-  const body: AuditList = { entries: page.rows.map(rowToEntry), nextCursor: page.nextCursor };
+  const body: AuditList = {
+    entries: page.rows.map(auditRowToEntry),
+    nextCursor: page.nextCursor,
+  };
   return c.json(body);
 });
 
@@ -355,14 +368,7 @@ roomRoutes.delete('/:id/roommates/:rid', requireUser, async (c) => {
 
   // Don't allow removing the last admin — would brick the room.
   if (target.role === 'admin') {
-    const remainingAdmins = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM roommate WHERE room_id = ? AND role = 'admin' AND id != ?`,
-    )
-      .bind(roomId, rid)
-      .first<{ n: number }>();
-    if (!remainingAdmins || remainingAdmins.n < 1) {
-      throw new HttpError(409, 'last_admin');
-    }
+    await assertNotLastAdmin(c.env.DB, roomId, rid);
   }
 
   await deleteRoommate(c.env.DB, rid);
@@ -396,17 +402,9 @@ roomRoutes.post('/:id/roommates/:rid/role', requireUser, async (c) => {
   // guard so a redundant click doesn't false-trip last_admin.
   if (oldRole === newRole) return c.json({ ok: true, role: newRole });
 
-  // Demoting an admin: make sure another admin remains. Same query
-  // shape as the delete handler's last-admin guard.
+  // Demoting an admin: make sure another admin remains.
   if (oldRole === 'admin' && newRole === 'member') {
-    const remainingAdmins = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM roommate WHERE room_id = ? AND role = 'admin' AND id != ?`,
-    )
-      .bind(roomId, rid)
-      .first<{ n: number }>();
-    if (!remainingAdmins || remainingAdmins.n < 1) {
-      throw new HttpError(409, 'last_admin');
-    }
+    await assertNotLastAdmin(c.env.DB, roomId, rid);
   }
 
   await setRoommateRole(c.env.DB, rid, newRole);
@@ -574,13 +572,10 @@ roomRoutes.delete('/:id/devices/:deviceId', requireUser, async (c) => {
   const deviceId = c.req.param('deviceId');
   const me = await requireAdmin(c, roomId);
 
-  // Sanity check: only let the room's admins revoke devices that belong to
-  // this room (don't leak across tenants).
-  const devices = await listDevicesForRoom(c.env.DB, roomId);
-  if (!devices.some((d) => d.id === deviceId)) {
-    throw new HttpError(404, 'device_not_found');
-  }
-  await revokeDevice(c.env.DB, deviceId);
+  // Single round-trip: cross-tenancy check happens in the UPDATE's
+  // WHERE clause, so a stranger room's admin can't revoke this device.
+  const updated = await revokeDevice(c.env.DB, roomId, deviceId);
+  if (!updated) throw new HttpError(404, 'device_not_found');
   await recordAudit(c.env.DB, {
     actorUserId: me.userId,
     roomId,
