@@ -135,27 +135,35 @@ limiter is reached. Cookie name centralized in `auth/session.ts` as
 
 ---
 
-## M6. `/api/auth/{bsky,telegram}` has no rate-limit
+## M6. `/api/auth/{bsky,telegram}` has no rate-limit — deferred
 
 **State.** Both login start/callback endpoints rely solely on
 Cloudflare-edge absorption. No app-level limit; no Turnstile gate.
 
 **Risk.** Burns Worker CPU during a flood; no credential leak (the
-OAuth state/HMAC checks fail closed). Realistic exploit is more
-nuisance than compromise.
+OAuth state/HMAC checks fail closed). Realistic exploit is nuisance,
+not compromise.
 
-**Fix options.**
-- **A:** Add Turnstile to the `/api/auth/bsky/start` and
-  `/api/auth/telegram` POST. Same asymmetric-cost pattern as the
-  visitor unlock retry.
-- **B:** Cloudflare JA3/JA4 fingerprint Rate Limit Rule (NAT-safe;
-  distinguishes individual browsers behind one IP). Requires a Pro
-  zone for the fingerprint feature — we're Free today.
-- **C:** Skip — accept the flood as an availability concern handled
-  by the edge.
+**Decision.** Defer. Adding Turnstile to every login click is
+over-correcting for an availability concern that hasn't materialized,
+and the JA3/JA4 fingerprint Rate Limit Rule needs a Pro zone we
+don't have. Edge absorption is the load-bearing defense for now.
 
-**Effort.** A: ~1 h (already have Turnstile plumbing on the unlock
-path). B: requires zone upgrade. C: 0.
+**Trigger to revisit (any of):**
+- `wrangler tail` shows sustained login traffic that the Worker
+  CPU budget can't absorb (i.e. real users start seeing slow
+  logins during a flood).
+- One IP / JA3 fingerprint completes >100 failed BSky/Telegram
+  callbacks in an hour — actual login-brute behavior.
+- Zone plan moves to Pro (unlocks JA3/JA4 Rate Limit Rules without
+  any application-layer change).
+
+**Fix when triggered.**
+- **A:** Stage Turnstile only after N failed callbacks per visitor
+  cookie, mirroring the `/unlock` 3-failures → Turnstile pattern in
+  `apps/worker/src/routes/visitor.ts:28`. ~1 h.
+- **B:** JA3/JA4 fingerprint Rate Limit Rule at the zone layer once
+  the plan supports it. Zero application code.
 
 ---
 
