@@ -167,7 +167,7 @@ don't have. Edge absorption is the load-bearing defense for now.
 
 ---
 
-## L3. BSky link flow has no explicit "are you linking?" confirmation
+## L3. BSky link flow has no explicit "are you linking?" confirmation — deferred until dashboard
 
 **State.** `/api/auth/bsky/start` infers link-vs-login intent from
 the presence of a `cs_session` cookie. If a logged-in user clicks a
@@ -182,17 +182,24 @@ the victim would need to log into BSky AS the attacker. The
 DID is already linked to someone else. Real-world likelihood is
 very low absent significant social engineering.
 
-**Fix options.**
-- **A:** Add an explicit dashboard "Link account" affordance that
-  generates a short-TTL nonce; `/start` only accepts the link
-  intent when that nonce is present. The bare URL becomes
-  login-only.
-- **B:** Show a confirmation page after the callback when
-  `linkToUserId` was set, requiring the user to click "yes, link
-  this account."
-- **C:** Skip — accept the low-likelihood risk.
+**Decision.** Defer. The clean fix is a dashboard "Link account"
+affordance that mints a short-TTL nonce, and `/start` rejects link
+intent without that nonce. That can only land once the dashboard
+frontend exists — there's nothing to attach the affordance to today
+(the web app is splash-only).
 
-**Effort.** A: ~half-day with frontend work. B: ~2 h.
+**Trigger to revisit.** When the dashboard ships an "Account
+settings → Linked accounts" screen (or equivalent), bundle the
+nonce-gated link flow with it.
+
+**Fix when triggered.**
+- Dashboard mints a one-shot nonce in KV (`bsky:link:<nonce>` →
+  `userId`, 5-min TTL), redirects to
+  `/api/auth/bsky/start?handle=…&link=<nonce>`.
+- `/start` requires `link=` for `linkToUserId` to take effect.
+  Without it, an existing `cs_session` is ignored and the flow is
+  treated as a fresh login (which collides on the existing identity
+  → no silent attach).
 
 ---
 
