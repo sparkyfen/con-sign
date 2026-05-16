@@ -135,29 +135,6 @@ limiter is reached. Cookie name centralized in `auth/session.ts` as
 
 ---
 
-## M5. `/api/trmnl/setup` has no rate-limit (storage growth only)
-
-**State.** Now that `/setup` returns a 202 stub instead of credentials
-(`407b6cc`), an attacker spamming arbitrary MACs can no longer
-extract auth tokens. But each unique MAC still creates an unclaimed
-`device` row.
-
-**Risk.** Storage growth. The daily stale-device cron (`runStaleDeviceCleanup`)
-GCs rows quiet ≥90 days, so absent active sustained spam, growth is
-self-healing. Worker invocation cost is per-request, edge-absorbed.
-Low impact pre-launch.
-
-**Fix options.**
-- Skip — let the 90-day cron handle it, accept the noise floor.
-- Add a *per-(IP, MAC)* zone Rate Limiting Rule (NAT-safe because
-  each panel has a unique MAC) e.g. 1 setup-request per minute per
-  (IP, MAC). Avoids punishing multiple panels arriving at the same
-  venue.
-
-**Effort.** Skip: 0. Add: ~15 min Cloudflare dashboard config.
-
----
-
 ## M6. `/api/auth/{bsky,telegram}` has no rate-limit
 
 **State.** Both login start/callback endpoints rely solely on
