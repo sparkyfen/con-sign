@@ -85,23 +85,36 @@ useful for `wrangler d1 execute` during incident response right now.
 
 ---
 
-## L1. Device bearer (`device_id`) is plaintext, persistent, panel-stealable
+## L1. Device bearer (`api_key`) is plaintext on-panel, rotatable on re-claim
 
-**State.** A panel's bearer is its UUID, set once at first boot and
-reused forever. If the panel is physically stolen and the firmware
-storage is dumped, the attacker can poll `/api/device/sign.png` with
-that UUID forever.
+**State.** A claimed panel persists its `device.api_key` (a UUID) in
+non-volatile firmware config. Physical theft + storage dump leaks
+that api_key. The attacker can then poll `/api/trmnl/display`,
+`/api/trmnl/log`, and `/api/device/sign.png?d=<api_key>` for that
+device.
 
-**Risk.** The endpoint only returns a guest-tier projection (no
-personal data, by design — see `PLAN.md`). The attacker learns the
-public room view, which is information any QR-scanner already has.
-Acceptable per the original threat model.
+**Risk (post-H0 model, see commit 407b6cc).**
+- `/sign.png` returns the same GUEST-tier projection that any
+  QR-scanner in the corridor already sees. No incremental
+  confidentiality loss vs. baseline threat.
+- `/log` lets the attacker write 1 KB of arbitrary JSON into the
+  device's KV log entry that admins read when triaging. Telemetry
+  corruption surface; bounded by `LOG_MAX_BYTES`.
+- `/display` returns the envelope; no extra data.
+- **Persistence is bounded by admin action.** Admin clicks revoke
+  in the dashboard → re-claim via pair-code OTP → `claimDevice`
+  mints a *fresh* api_key, invalidating the stolen one. Recovery
+  is one dashboard action, no D1 edit needed.
 
-**Fix.** Not currently planned. If we ever expose more than guest-tier
-data through the device endpoint, revisit and consider rotating
-`device_id` on demand, or require an admin to re-pair a stolen device.
+**Accepted** per the original threat model. No code change required.
 
-**Effort.** N/A unless threat model changes.
+**Revisit if any of:**
+- Device endpoints start exposing data above GUEST tier.
+- `/log` payloads start driving anything beyond admin-triage UI
+  (e.g., automated alerts that an attacker could spoof).
+- We add a "reset device" admin affordance (revoke + claim in one
+  click) that wants to clear `api_key` directly rather than going
+  through the OTP path — UX work, not security.
 
 ---
 
