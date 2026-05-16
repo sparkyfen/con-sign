@@ -118,20 +118,23 @@ device.
 
 ---
 
-## L2. Visitor unlock is per-cookie, not identity-bound
+## L2. Visitor unlock is per-cookie, not identity-bound — accepted, tracked in PLAN.md
 
-**State.** The visitor `cs_unlock_<roomId>` cookie is additive — anyone
+**State.** The visitor `cs_unlock_<roomId>` cookie is additive: anyone
 who has the cookie sees the unlocked roommates. Not tied to a logged-in
-identity (by design — visitors don't log in).
+identity by design — visitors don't log in.
 
-**Risk.** An admin who shares an unlock cookie (intentionally or
-accidentally — DevTools export, screenshare slip) effectively shares
-unlock access. Per-roommate passcode rotation revokes by snapshot, but
-that's a manual lever.
+**Risk.** A cookie shared intentionally or leaked accidentally
+(DevTools export, screenshare slip, browser sync to a shared device)
+hands unlock access to the recipient. The current revoke mechanism is
+per-roommate passcode rotation — admin-driven, by snapshot, manual.
 
-**Fix.** Already designed in PLAN.md as a stretch item: identity-tied
-ACLs that augment passcodes with allowlists keyed off `identity`.
-Tracked separately from this doc.
+**Accepted** per the visitor model. The improvement path is
+**identity-tied ACLs** that augment the passcode tier with allowlists
+keyed off `identity`. Tracked in `PLAN.md` under the deferred
+stretch-goal list (search for "Identity-tied ACLs"), gated on the
+`/login` page existing on the frontend so visitors can opt into
+logging in.
 
 ---
 
