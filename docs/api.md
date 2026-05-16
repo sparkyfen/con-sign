@@ -192,11 +192,6 @@ Response: `RoomMembership` —
 `isOnlyAdmin` is true iff the *caller* is the room's only admin — pre-disable
 "Leave" / "Remove" buttons accordingly so users don't hit the 409.
 
-### `GET /api/rooms/:id/qr.png` *(admin required)*
-Returns an SVG (despite the `.png` extension; the URL is kept stable).
-Encodes the public room URL `https://cons.social/r/<slug>`. Use directly
-as `<img src="...">`. Cached `private, max-age=3600`.
-
 ### `POST /api/rooms/:id/invite` *(admin required)*
 Mint an invite token (5-min TTL). Response: `InviteResponse` —
 `{ inviteUrl: string, expiresAt: ISO8601 }`. Share the URL — the invitee logs

@@ -1,5 +1,4 @@
 import { Hono, type Context } from 'hono';
-import QRCode from 'qrcode';
 import {
   claimDeviceSchema,
   createRoomSchema,
@@ -489,34 +488,6 @@ roomRoutes.post('/:id/roommates/:rid/passcode', requireUser, async (c) => {
     targetId: rid,
   });
   return c.json(share);
-});
-
-// ─── GET /api/rooms/:id/qr.png ────────────────────────────────────────────
-// Admin-only. Returns an SVG QR encoding the public room URL
-// (https://<host>/r/<slug>) for the dashboard's "Preview QR" affordance.
-// We serve SVG (still at /qr.png to keep URL stable) because qrcode's PNG
-// path resolves to the canvas-bound browser entrypoint under the Worker
-// runtime; toString({type:'svg'}) is a pure string render with no DOM dep.
-
-roomRoutes.get('/:id/qr.png', requireUser, async (c) => {
-  const roomId = c.req.param('id');
-  await requireAdmin(c, roomId);
-  const room = await getRoom(c.env.DB, roomId);
-  if (!room) throw new HttpError(404, 'room_not_found');
-
-  const url = `${origin(c)}/r/${room.qr_slug}`;
-  const svg = await QRCode.toString(url, {
-    type: 'svg',
-    errorCorrectionLevel: 'M',
-    margin: 2,
-  });
-  return new Response(svg, {
-    headers: {
-      'Content-Type': 'image/svg+xml; charset=utf-8',
-      // Slug is stable; admin-only response so private cache is safe.
-      'Cache-Control': 'private, max-age=3600',
-    },
-  });
 });
 
 // ─── Device pairing ───────────────────────────────────────────────────────

@@ -170,13 +170,56 @@ export interface RoommateRow {
  * follows whichever identity the user chose for this room (currently we use
  * the most recently updated identity).
  */
+/**
+ * Status is stored across three columns (`status_kind`, `status_preset`,
+ * `status_custom_text`) so the DB can index/filter on the discriminator.
+ * Project it back to the tagged-union shape the rest of the app sees.
+ */
+function statusFromColumns(row: RoommateRow): Status | null {
+  if (row.status_kind === 'preset' && row.status_preset) {
+    return { kind: 'preset', preset: row.status_preset };
+  }
+  if (row.status_kind === 'custom' && row.status_custom_text) {
+    return { kind: 'custom', text: row.status_custom_text };
+  }
+  return null;
+}
+
+/**
+ * Flatten a `Status | null` patch into the three column updates the DB
+ * needs, plus the `status_updated_at` bookkeeping. A null status
+ * (clearing) nulls every column including the timestamp; preset and
+ * custom each set their own combination. Returned in the order
+ * `updateRoommateProfile` will write them.
+ */
+function statusToColumns(status: Status | null): Array<[string, unknown]> {
+  if (status === null) {
+    return [
+      ['status_kind', null],
+      ['status_preset', null],
+      ['status_custom_text', null],
+      ['status_updated_at', null],
+    ];
+  }
+  const now = new Date().toISOString();
+  if (status.kind === 'preset') {
+    return [
+      ['status_kind', 'preset'],
+      ['status_preset', status.preset],
+      ['status_custom_text', null],
+      ['status_updated_at', now],
+    ];
+  }
+  return [
+    ['status_kind', 'custom'],
+    ['status_preset', null],
+    ['status_custom_text', status.text],
+    ['status_updated_at', now],
+  ];
+}
+
 export function roommateRowToApi(row: RoommateRow, avatarUrl: string | null): Roommate {
-  const status: Status | null =
-    row.status_kind === 'preset' && row.status_preset
-      ? { kind: 'preset', preset: row.status_preset }
-      : row.status_kind === 'custom' && row.status_custom_text
-        ? { kind: 'custom', text: row.status_custom_text }
-        : null;
+  const status = statusFromColumns(row);
 
   return {
     id: row.id,
@@ -741,23 +784,8 @@ export async function updateRoommateProfile(
   if ('pronouns' in patch) push('pronouns', patch.pronouns ?? null);
   if ('bskyHandle' in patch) push('bsky_handle', patch.bskyHandle ?? null);
   if ('telegramHandle' in patch) push('telegram_handle', patch.telegramHandle ?? null);
-  if ('status' in patch) {
-    if (patch.status === null) {
-      push('status_kind', null);
-      push('status_preset', null);
-      push('status_custom_text', null);
-      push('status_updated_at', null);
-    } else if (patch.status?.kind === 'preset') {
-      push('status_kind', 'preset');
-      push('status_preset', patch.status.preset);
-      push('status_custom_text', null);
-      push('status_updated_at', new Date().toISOString());
-    } else if (patch.status?.kind === 'custom') {
-      push('status_kind', 'custom');
-      push('status_preset', null);
-      push('status_custom_text', patch.status.text);
-      push('status_updated_at', new Date().toISOString());
-    }
+  if ('status' in patch && patch.status !== undefined) {
+    for (const [col, val] of statusToColumns(patch.status)) push(col, val);
   }
   if (sets.length === 0) return;
   binds.push(roommateId);

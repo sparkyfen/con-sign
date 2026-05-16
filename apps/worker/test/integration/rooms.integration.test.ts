@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { call, loginAs, newCtx, seedCon } from '../helpers.js';
-import { app } from '../../src/index.js';
-import { SESSION_COOKIE } from '../../src/auth/session.js';
 import type { Ctx } from '../helpers.js';
 
 const ADMIN = '00000000-0000-0000-0000-000000000a01';
@@ -11,12 +9,6 @@ interface RoomCreated {
   room: { id: string; qrSlug: string };
   me: { roommateId: string };
   passcode: { passcode: string; shareUrl: string; qrDataUrl: string };
-}
-
-async function fetchBinary(ctx: Ctx, path: string): Promise<Response> {
-  const cookie = `${SESSION_COOKIE}=${ctx.cookies.get(SESSION_COOKIE) ?? ''}`;
-  const req = new Request(`http://localhost${path}`, { headers: { Cookie: cookie } });
-  return app.fetch(req, ctx.env as unknown as Parameters<typeof app.fetch>[1]);
 }
 
 describe('integration: room lifecycle', () => {
@@ -198,40 +190,6 @@ describe('integration: room lifecycle', () => {
       expect(dump).not.toContain('passcode_hash');
       expect(dump).not.toContain('passcodeHash');
     }
-  });
-
-  it('serves a room QR SVG to admins, encoding the public room URL', async () => {
-    const ctx = newCtx();
-    const conId = await seedCon(ctx);
-    await loginAs(ctx, ADMIN);
-    const created = (await call(ctx, 'POST', '/api/rooms', {
-      body: { conId, name: 'Room' },
-    })).body as RoomCreated;
-
-    const res = await fetchBinary(ctx, `/api/rooms/${created.room.id}/qr.png`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('image/svg+xml');
-    const text = await res.text();
-    expect(text).toMatch(/^<\?xml|^<svg/);
-    expect(text).toContain('</svg>');
-  });
-
-  it('refuses room QR to non-admins', async () => {
-    const ctx = newCtx();
-    const conId = await seedCon(ctx);
-    await loginAs(ctx, ADMIN);
-    const created = (await call(ctx, 'POST', '/api/rooms', {
-      body: { conId, name: 'Room' },
-    })).body as RoomCreated;
-    const inviteRes = (await call(ctx, 'POST', `/api/rooms/${created.room.id}/invite`)).body as {
-      inviteUrl: string;
-    };
-    const token = inviteRes.inviteUrl.split('/invite/')[1]!;
-    await loginAs(ctx, FRIEND);
-    await call(ctx, 'POST', '/api/rooms/join', { body: { token } });
-
-    const r = await call(ctx, 'GET', `/api/rooms/${created.room.id}/qr.png`);
-    expect(r.status).toBe(403);
   });
 
   it('rejects a non-admin trying to invite', async () => {

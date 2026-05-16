@@ -3,6 +3,7 @@ import { projectRoommate } from '@con-sign/shared';
 import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import { getOrCreatePairCode } from '../auth/pair-code.js';
+import { classifyDeviceState } from '../devices/state.js';
 import {
   getDevice,
   getRoom,
@@ -94,30 +95,21 @@ deviceRoutes.get('/sign.png', async (c) => {
   }
 
   const device = await getDevice(c.env.DB, deviceId);
-
-  // Revoke is a one-poll-cycle notice: the corridor sees "panel
-  // unpaired" once, then the device self-heals to the unpaired+pair-code
-  // screen so no admin has to remember to manually reset it. `revokeDevice`
-  // wipes `last_seen_at`, so the first post-revoke poll sees it NULL
-  // (notice shown) and `touchDevice` sets it; subsequent polls see a
-  // populated `last_seen_at` and route through the unpaired branch. The
-  // audit trail keeps the revocation record either way.
-  const revokedAlreadyShown =
-    !!device?.revoked_at && device.last_seen_at != null;
+  const state = classifyDeviceState(device);
 
   let svg: string;
-  if (!device || (!device.room_id && !device.revoked_at) || revokedAlreadyShown) {
-    // Unpaired: no row yet, OR row exists with both fields cleared
-    // (post-claim transition), OR row is revoked but already displayed
-    // the notice. Touch the row (when present) so the next state
-    // change has a fresh last_seen_at to compare against.
+  if (state === 'unpaired' || state === 'self-healed') {
+    // Self-healed rows still exist in D1 — touch them so the next
+    // state change has a fresh last_seen_at to compare against.
     if (device) await touchDevice(c.env.DB, deviceId);
     const code = await getOrCreatePairCode(c.env.SESSIONS, deviceId);
     svg = renderUnpairedSvg({ pairCode: code, width, height });
   } else {
+    // `paired` and `revoked-notice` both imply a real `device` row.
+    if (!device) throw new HttpError(500, 'classifier_invariant');
     await touchDevice(c.env.DB, deviceId);
 
-    if (device.revoked_at) {
+    if (state === 'revoked-notice') {
       svg = renderRevokedSvg({ width, height });
     } else {
       // Paired — fetch the room + roommates and render at GUEST tier.

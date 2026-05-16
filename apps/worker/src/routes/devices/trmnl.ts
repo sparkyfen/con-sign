@@ -20,6 +20,7 @@ import {
 } from '../../db/queries.js';
 import { buildDisplayEnvelope } from '../../trmnl/adapter.js';
 import { recordAudit } from '../../db/audit.js';
+import { classifyDeviceState, envelopeStateFromRender } from '../../devices/state.js';
 
 export const trmnlRoutes = new Hono<Env>();
 
@@ -139,12 +140,7 @@ trmnlRoutes.get('/display', async (c) => {
 
   // Mirror the routing rule in /api/device/sign.png so the cache-bust
   // tag matches what we'll actually render on the device's next fetch.
-  const state =
-    found.device.revoked_at && found.device.last_seen_at == null
-      ? 'revoked'
-      : found.device.room_id && !found.device.revoked_at
-        ? 'paired'
-        : 'unpaired';
+  const state = envelopeStateFromRender(classifyDeviceState(found.device));
 
   const envelope = buildDisplayEnvelope({
     deviceId,
