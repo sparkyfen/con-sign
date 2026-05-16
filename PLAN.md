@@ -310,6 +310,31 @@ edit own visibility.
 - Identity-tied ACLs (replace/augment passcode tier with allowlists keyed off
   `identity`).
 
+**Code-quality follow-ups (from simplification reviews):**
+
+- **N+1 roommate projection** — `routes/visitor.ts` + `routes/device.ts`
+  both loop `Promise.all(rows.map(getVisibility + projectRoommate))`.
+  Extract `listProjectedRoommates(db, roomId, unlockedIds)` and fold
+  `field_visibility` into the same query via LEFT JOIN. Eliminates the
+  per-roommate round-trip on every panel render and every visitor view.
+- **Drop the panel QR sidebar** in `apps/worker/src/render/sign.ts`. The
+  current canonical e-ink mockup (`Screen / E-Ink Sign Render`, frame
+  `TFPoI`) is full-bleed three-row, not the older sidebar variant.
+  Removing it saves ~40 lines + the `qrcode` lib hit on every device
+  poll + ~25% panel width.
+- **Drop `turnstileRequired` from the visitor GET response** in
+  `apps/worker/src/routes/visitor.ts`. The unlock-sheet learns about
+  Turnstile from the 401 on `/unlock`; pre-fetching it on every
+  pageview adds a KV read with no UI consumer.
+
+**Testing infrastructure:**
+
+- **Miniflare swap** in `apps/worker/test/doubles.ts` — replace the
+  hand-rolled SQLite + Map stubs with workerd via Miniflare. Catches
+  Workers-runtime bugs at PR time (the qrcode/canvas regression that
+  reached prod is the canonical example). Unblocks BSky OAuth
+  integration tests that need the real fetch shim.
+
 ---
 
 ## Project Layout
