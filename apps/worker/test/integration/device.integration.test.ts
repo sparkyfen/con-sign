@@ -5,6 +5,19 @@ const ADMIN = '00000000-0000-0000-0000-000000000a01';
 const DEVICE_A = '11111111-1111-1111-1111-111111111111';
 const DEVICE_B = '22222222-2222-2222-2222-222222222222';
 
+/**
+ * After claim the bearer that `/sign.png` accepts rotates from
+ * `device.id` to the freshly-minted `api_key`. Tests that poke the
+ * panel post-claim use this helper to fetch the current credential.
+ */
+async function apiKeyFor(ctx: Ctx, deviceId: string): Promise<string> {
+  const row = await ctx.env.DB.prepare('SELECT api_key FROM device WHERE id = ?')
+    .bind(deviceId)
+    .first<{ api_key: string }>();
+  if (!row?.api_key) throw new Error(`no api_key on device ${deviceId}`);
+  return row.api_key;
+}
+
 interface RoomCreated {
   room: { id: string; qrSlug: string };
   me: { roommateId: string };
@@ -96,7 +109,7 @@ describe('integration: device endpoint (pair-code flow)', () => {
     expect(await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`)).toBeNull();
 
     const r = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${await apiKeyFor(ctx, DEVICE_A)}` },
     });
     expect(r.status).toBe(200);
     expect(r.body).toContain('Pubname'); // guest-tier visible
@@ -207,13 +220,18 @@ describe('integration: device endpoint (pair-code flow)', () => {
     const devices = (list.body as { devices: { id: string }[] }).devices;
     expect(devices.map((d) => d.id).sort()).toEqual([DEVICE_A, DEVICE_B].sort());
 
+    // Capture the api_key BEFORE revoke; the credential survives revoke
+    // (only the room link clears) so the panel can still fetch the
+    // notice screen.
+    const apiKeyA = await apiKeyFor(ctx, DEVICE_A);
+
     // Revoke one.
     const rv = await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
     expect(rv.status).toBe(200);
 
     // It now renders the revoked panel.
     const r = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${apiKeyA}` },
     });
     expect(r.body).toContain('PANEL UNPAIRED');
 
@@ -232,30 +250,35 @@ describe('integration: device endpoint (pair-code flow)', () => {
     await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${DEVICE_A}` } });
     const code1 = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
     await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code: code1 } });
+    const keyV1 = await apiKeyFor(ctx, DEVICE_A);
     await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
 
-    // First post-revoke poll: revoke notice.
+    // First post-revoke poll: revoke notice. api_key persists through
+    // revoke, so the firmware's existing credential still works.
     const poll1 = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${keyV1}` },
     });
     expect(poll1.body).toContain('PANEL UNPAIRED');
     expect(poll1.body).not.toContain('PAIRING CODE');
 
     // Second poll: self-heal — pair code instead of the notice.
     const poll2 = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${keyV1}` },
     });
     expect(poll2.body).toContain('PAIRING CODE');
     expect(poll2.body).not.toContain('PANEL UNPAIRED');
 
-    // The new pair code is reclaimable; revoked_at gets cleared on
-    // claim and the device returns to paired state.
+    // The new pair code is reclaimable; claim rotates the api_key to
+    // a fresh value so an attacker who held the previous one (e.g.
+    // pre-revoke leak) can't ride along into the new pairing.
     const code2 = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
     expect(code2).toBeTruthy();
     const claim = await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code: code2 } });
     expect(claim.status).toBe(200);
+    const keyV2 = await apiKeyFor(ctx, DEVICE_A);
+    expect(keyV2).not.toBe(keyV1);
     const poll3 = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${keyV2}` },
     });
     expect(poll3.body).not.toContain('PAIRING CODE');
     expect(poll3.body).not.toContain('PANEL UNPAIRED');
@@ -269,21 +292,23 @@ describe('integration: device endpoint (pair-code flow)', () => {
     await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${DEVICE_A}` } });
     const code = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
     await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code } });
+    const keyV1 = await apiKeyFor(ctx, DEVICE_A);
     // Revoke #1, consume the notice, self-heal.
     await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
-    await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${DEVICE_A}` } });
+    await call(dev, 'GET', '/api/device/sign.png', { headers: { Authorization: `Bearer ${keyV1}` } });
     const healed = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${keyV1}` },
     });
     expect(healed.body).toContain('PAIRING CODE');
 
-    // Re-pair so we can revoke again.
+    // Re-pair so we can revoke again. claim rotates the api_key.
     const code2 = (await ctx.env.SESSIONS.get(`pair:dev:${DEVICE_A}`))!;
     await call(ctx, 'POST', `/api/rooms/${roomId}/devices/claim`, { body: { code: code2 } });
+    const keyV2 = await apiKeyFor(ctx, DEVICE_A);
     // Revoke #2 — should show the notice exactly once more.
     await call(ctx, 'DELETE', `/api/rooms/${roomId}/devices/${DEVICE_A}`);
     const reRevoked = await call(dev, 'GET', '/api/device/sign.png', {
-      headers: { Authorization: `Bearer ${DEVICE_A}` },
+      headers: { Authorization: `Bearer ${keyV2}` },
     });
     expect(reRevoked.body).toContain('PANEL UNPAIRED');
   });

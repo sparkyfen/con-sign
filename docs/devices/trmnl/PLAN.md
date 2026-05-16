@@ -78,25 +78,36 @@ Four endpoints; con-sign owns each.
 
 | Method + path | Purpose |
 |---|---|
-| `GET /api/trmnl/setup` | First boot. Device sends its MAC in a header. Server creates an unpaired `device` row keyed by a freshly-issued UUID, returns `{ api_key, friendly_id }`. The `api_key` is just the UUID — single identity throughout. |
-| `GET /api/trmnl/display` | Hot loop. Device polls with `Access-Token: <api_key>`. Response: `{ image_url, refresh_rate, filename, reset_firmware?, update_firmware?, special_function? }`. The `image_url` points at our existing `/api/device/sign.png` (now serving PNG/BMP), with the api_key embedded for auth. |
-| `POST /api/trmnl/log` | Telemetry: battery, runtime errors, button presses. Optional; stash last 1 KB per device, drop on re-claim. |
+| `GET /api/trmnl/setup` | MAC handshake. The server creates an unpaired `device` row keyed by MAC and returns `{status: 202, api_key: null, image_url, ...}` — a "still awaiting claim" stub. The `api_key` is only released after an operator claims the device, via either a 5-minute post-claim pending window or a request that already presents the matching `ACCESS_TOKEN` (re-pair). |
+| `GET /api/trmnl/display` | Hot loop. Device polls with `ACCESS_TOKEN: <api_key>`. Required — no MAC fallback. Response: `{ image_url, refresh_rate, filename }`. The `image_url` points at `/api/device/sign.png` with the api_key as the URL bearer. |
+| `POST /api/trmnl/log` | Telemetry: battery, runtime errors, button presses. `ACCESS_TOKEN` required, same as `/display`. Stash last 1 KB per device, drop on re-claim. |
 | Firmware OTA | Defer to TRMNL's hosted firmware URLs. We never host firmware bytes. |
 
 ## Auth model
 
-- **`Access-Token`** header on the device's polls; value equals the
-  `device.id` UUID we issued at setup. No separate key column.
-- Setup itself: trust on first use. The device sends its MAC, we
-  trust it (TRMNL hardware uniquely owns its MAC; this is the
-  device's "I'm a TRMNL" credential). If the row already exists for
-  that MAC, return the existing api_key — that's the re-pair path.
-- **Pair-code claim** stays exactly as today: admin enters the
-  6-char OTP shown on the panel, server `claimDevice`s the row,
-  next display poll returns the paired sign.
+- **Two separate UUIDs**: `device.id` (internal row PK) and
+  `device.api_key` (firmware-facing credential). The split closes a
+  bare-MAC takeover vulnerability — stock TRMNL firmware sends no
+  secret on `/setup`, so MAC is treated as identity only.
+- **`ACCESS_TOKEN`** header on the device's polls of `/display` and
+  `/log`; value is the `device.api_key`. NULL until an operator
+  claims the device.
+- **`/setup` is gated**, not trust-on-first-use:
+  - If the request presents `ACCESS_TOKEN` matching the row's
+    `api_key` → re-pair, return the key.
+  - Else if the row is inside the post-claim pending window (the
+    operator just claimed) → one-shot hand-off, close the window.
+  - Else → return the 202 "awaiting claim" stub.
+- **Pair-code claim**: admin enters the 6-char OTP shown on the
+  panel's pre-claim splash; the server consumes the code, mints a
+  fresh `api_key`, and opens the 5-minute pending window. The
+  device's next `/setup` poll picks the key up.
+- **Revoke** keeps `api_key` set (so the firmware can still render
+  the revoke-notice screen) but clears `room_id`. A subsequent
+  re-claim mints a *new* `api_key`, invalidating anything the prior
+  holder of the key may have stashed.
 - All TRMNL endpoints carve out of the CSRF Origin middleware
-  (server-to-device, no browser). The auth is the `Access-Token`,
-  full stop.
+  (server-to-device, no browser).
 
 ## Image format
 
@@ -301,6 +312,15 @@ overrides). TRMNL adapter picks the format that matches firmware.
   doesn't fill up on reboots. The /display + /log fallback paths
   that lazy-create on MAC deliberately don't audit; /setup is the
   canonical first-contact event. ✅
+- **`/setup` MAC-replay hardening**: migration 0009 splits
+  `device.api_key` from `device.id`. `/setup` no longer hands out a
+  credential to an unauthenticated caller — it returns a 202
+  "awaiting claim" stub instead. The api_key is minted at claim
+  time and reaches the firmware via a 5-minute post-claim pending
+  window (one-shot) or a re-pair with matching `ACCESS_TOKEN`.
+  `/display` and `/log` drop their MAC-fallback paths since MAC
+  isn't a credential. Closes the device-takeover vector flagged
+  in the security review. ✅
 
 ## What's left
 

@@ -412,6 +412,20 @@ export interface DeviceRow {
   last_seen_at: string | null;
   created_at: string;
   mac_address?: string | null;
+  /**
+   * Firmware-facing bearer credential. NULL until the device has been
+   * claimed by an operator; refreshed on every claim and cleared on
+   * revoke/reset. `device.id` is the internal PK and stays stable
+   * across rotations.
+   */
+  api_key?: string | null;
+  /**
+   * One-shot window during which `/api/trmnl/setup` will hand the
+   * `api_key` to a request that lacks `ACCESS_TOKEN` (the bootstrap
+   * after a claim — the firmware doesn't have the key yet). Set by
+   * `claimDevice`; cleared on the first successful hand-off.
+   */
+  api_key_pending_until?: string | null;
   battery_voltage?: number | null;
   percent_charged?: number | null;
   rssi?: number | null;
@@ -529,6 +543,51 @@ export async function getDevice(db: D1Database, deviceId: string): Promise<Devic
   return db.prepare('SELECT * FROM device WHERE id = ?').bind(deviceId).first<DeviceRow>();
 }
 
+/**
+ * Look up a device by its firmware-facing `api_key` (the value the
+ * TRMNL stock firmware sends in `ACCESS_TOKEN`). Returns null when no
+ * row matches — which is the right shape for the route to surface as
+ * 401, since the alternative (returning the device.id directly) would
+ * leak whether a given key is in the keyspace.
+ */
+export async function getDeviceByApiKey(
+  db: D1Database,
+  apiKey: string,
+): Promise<DeviceRow | null> {
+  if (!apiKey) return null;
+  return db.prepare('SELECT * FROM device WHERE api_key = ?').bind(apiKey).first<DeviceRow>();
+}
+
+/**
+ * One-shot bootstrap: if the device row has a non-expired
+ * `api_key_pending_until`, return its `api_key` and clear the window
+ * atomically. Used by `/api/trmnl/setup` to hand the credential to a
+ * just-claimed device's first poll, where the firmware hasn't yet
+ * stored an `ACCESS_TOKEN` to send.
+ *
+ * Returns null when the window has expired or the device hasn't been
+ * claimed yet — both map to "/setup returns 202 stub" at the route.
+ */
+export async function consumePendingApiKey(
+  db: D1Database,
+  deviceId: string,
+): Promise<string | null> {
+  const now = new Date().toISOString();
+  const result = await db
+    .prepare(
+      `UPDATE device
+          SET api_key_pending_until = NULL
+        WHERE id = ?
+          AND api_key IS NOT NULL
+          AND api_key_pending_until IS NOT NULL
+          AND api_key_pending_until > ?
+        RETURNING api_key`,
+    )
+    .bind(deviceId, now)
+    .first<{ api_key: string }>();
+  return result?.api_key ?? null;
+}
+
 export async function touchDevice(db: D1Database, deviceId: string): Promise<void> {
   await db
     .prepare('UPDATE device SET last_seen_at = ? WHERE id = ?')
@@ -536,41 +595,54 @@ export async function touchDevice(db: D1Database, deviceId: string): Promise<voi
     .run();
 }
 
+/** Pending-claim hand-off window for /setup. The device's first poll
+ * after a claim consumes the api_key without an Access-Token. Short
+ * enough that an attacker racing with the legitimate device has a
+ * narrow window; long enough that flaky Wi-Fi during setup doesn't
+ * brick the bootstrap. */
+const API_KEY_PENDING_TTL_MS = 5 * 60 * 1000;
+
 /**
- * Atomically pair a device to a room. Returns true on success, false when
- * the device already belongs to a (different) room and is not revoked —
- * the caller should surface a 409 in that case.
+ * Atomically pair a device to a room AND mint its firmware-facing
+ * `api_key` if one isn't set yet. Returns the api_key on success and
+ * null when the device already belongs to a different room (caller
+ * surfaces 409). The 5-minute pending window means the device's next
+ * `/api/trmnl/setup` call can pick the credential up even though the
+ * firmware has nothing to authenticate with yet.
  *
  * Two pathways succeed:
- *   - Fresh INSERT: device row didn't exist yet (unpaired state lives in
- *     KV, this is the first D1 row).
+ *   - Fresh INSERT: device row didn't exist yet.
  *   - Conflict UPDATE gated by WHERE: row exists but is unclaimed
  *     (room_id IS NULL) or previously revoked (revoked_at IS NOT NULL).
  *
  * The WHERE on the conflict branch closes a TOCTOU race between two
- * concurrent claim requests that both see the same KV pair code: the
- * second insert is allowed to fall into the conflict branch, but the
- * UPDATE is skipped — meta.changes comes back as 0 and we return false.
+ * concurrent claim requests against the same KV pair code: the loser's
+ * UPDATE is skipped and meta.changes comes back 0.
  */
 export async function claimDevice(
   db: D1Database,
   args: { deviceId: string; roomId: string },
-): Promise<boolean> {
-  const now = new Date().toISOString();
+): Promise<string | null> {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const pendingUntil = new Date(now.getTime() + API_KEY_PENDING_TTL_MS).toISOString();
+  const apiKey = newId();
   const result = await db
     .prepare(
-      `INSERT INTO device (id, room_id, paired_at, last_seen_at)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO device (id, room_id, paired_at, last_seen_at, api_key, api_key_pending_until)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          room_id = excluded.room_id,
          paired_at = excluded.paired_at,
          revoked_at = NULL,
-         last_seen_at = excluded.last_seen_at
+         last_seen_at = excluded.last_seen_at,
+         api_key = excluded.api_key,
+         api_key_pending_until = excluded.api_key_pending_until
        WHERE device.room_id IS NULL OR device.revoked_at IS NOT NULL`,
     )
-    .bind(args.deviceId, args.roomId, now, now)
+    .bind(args.deviceId, args.roomId, nowIso, nowIso, apiKey, pendingUntil)
     .run();
-  return ((result.meta as { changes?: number }).changes ?? 0) > 0;
+  return ((result.meta as { changes?: number }).changes ?? 0) > 0 ? apiKey : null;
 }
 
 /**
@@ -594,9 +666,17 @@ export async function revokeDevice(
   roomId: string,
   deviceId: string,
 ): Promise<boolean> {
+  // Keep `api_key` set so the firmware can still authenticate to
+  // /sign.png and render the revoke-notice screen on its next poll
+  // (the self-heal classifier uses `last_seen_at IS NULL` as the
+  // "notice not yet shown" flag). The credential rotates when an
+  // admin re-claims the device via the pair-code OTP — claimDevice
+  // overwrites `api_key` with a fresh value at that point. The
+  // pending window is cleared because there's no active claim.
   const result = await db
     .prepare(
-      'UPDATE device SET room_id = NULL, revoked_at = ?, last_seen_at = NULL ' +
+      'UPDATE device SET room_id = NULL, revoked_at = ?, last_seen_at = NULL, ' +
+        'api_key_pending_until = NULL ' +
         'WHERE id = ? AND room_id = ?',
     )
     .bind(new Date().toISOString(), deviceId, roomId)

@@ -6,6 +6,7 @@ import { getOrCreatePairCode } from '../auth/pair-code.js';
 import { classifyDeviceState } from '../devices/state.js';
 import {
   getDevice,
+  getDeviceByApiKey,
   getRoom,
   getVisibility,
   listRoommatesForRoom,
@@ -72,8 +73,23 @@ async function svgToResponse(svg: string, fmt: Format, width: number, height: nu
 deviceRoutes.get('/sign.png', async (c) => {
   const auth = c.req.header('Authorization');
   const headerMatch = auth?.match(/^Bearer (.+)$/);
-  const deviceId = (headerMatch?.[1] ?? c.req.query('d') ?? '').trim();
-  if (!deviceId) throw new HttpError(401, 'missing_bearer');
+  const bearer = (headerMatch?.[1] ?? c.req.query('d') ?? '').trim();
+  if (!bearer) throw new HttpError(401, 'missing_bearer');
+
+  // Bearer is the device's `api_key` for claimed/revoked devices, or
+  // the device's `id` for unclaimed-debug pre-claim panels. We accept
+  // both — api_key first, then fall back to a row that's never been
+  // claimed (`api_key IS NULL`). A bearer that matches a row's `id`
+  // but the row already has an api_key set is rejected: that bearer
+  // is the internal PK and the api_key is required after claim.
+  let device = await getDeviceByApiKey(c.env.DB, bearer);
+  if (!device) {
+    const byId = await getDevice(c.env.DB, bearer);
+    if (byId && byId.api_key == null) device = byId;
+  }
+  // Treat "no row" and "row needs api_key" identically — both render
+  // the unpaired pair-code screen via the classifier below.
+  const deviceId = device?.id ?? bearer;
 
   const widthQ = c.req.query('w');
   const heightQ = c.req.query('h');
@@ -94,7 +110,6 @@ deviceRoutes.get('/sign.png', async (c) => {
     if (cached) return cached;
   }
 
-  const device = await getDevice(c.env.DB, deviceId);
   const state = classifyDeviceState(device);
 
   let svg: string;

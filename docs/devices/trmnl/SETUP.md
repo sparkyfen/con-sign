@@ -36,14 +36,16 @@ captive portal lets you override the server URL at first boot.
    first call to `/api/setup`.
 
 If the captive portal on your firmware revision asks for an
-`api_key` upfront, leave it blank. The first `/api/setup` call will
-issue one based on the device's MAC.
+`api_key` upfront, leave it blank. The server does not issue an
+`api_key` until you've claimed the panel from a room (step 3) — the
+firmware idles on `/setup` until then.
 
 ## 2. Watch the panel come up
 
 On first poll the worker creates an unpaired device row keyed by the
-UUID it issues, and `/api/display` returns an image URL pointing at
-`/api/device/sign.png`. The panel fetches it and displays:
+MAC and returns a `status: 202` "awaiting claim" stub. The stub
+includes an `image_url` for the rotating-pair-code splash, so the
+panel displays:
 
 ```
               CON · SIGN
@@ -80,9 +82,13 @@ curl -X POST \
   https://cons.social/api/rooms/<ROOM_ID>/devices/claim
 ```
 
-Response on success: `{"deviceId":"<uuid>"}`. The TRMNL doesn't
-need to know — its next `/api/display` poll (within the configured
-`refresh_rate`, default 5 min) returns the paired-room envelope and
+Response on success: `{"deviceId":"<uuid>"}`. The server has now
+minted the panel's `api_key` and opened a 5-minute pending window.
+The panel's next `/api/setup` poll picks the credential up (no
+`ACCESS_TOKEN` required during the window — single-use, then the
+window closes). From there the firmware switches to `/api/display`
+polls and (within the configured `refresh_rate`, default 5 min)
+returns the paired-room envelope and
 the panel switches to the room sign.
 
 If you want the panel to update immediately rather than waiting,

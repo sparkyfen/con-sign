@@ -514,8 +514,13 @@ roomRoutes.post('/:id/devices/claim', requireUser, async (c) => {
   const deviceId = await consumePairCode(c.env.SESSIONS, body.code);
   if (!deviceId) throw new HttpError(404, 'pair_code_unknown_or_expired');
 
-  const claimed = await claimDevice(c.env.DB, { deviceId, roomId });
-  if (!claimed) throw new HttpError(409, 'device_already_claimed');
+  // claimDevice mints a fresh api_key bound to the deviceId and opens
+  // a short pending window during which the device's next /setup poll
+  // can pick it up without already holding an Access-Token. The key
+  // itself is delivered to the firmware via /setup, not echoed back
+  // here — keeping it out of the admin's network log + browser cache.
+  const apiKey = await claimDevice(c.env.DB, { deviceId, roomId });
+  if (!apiKey) throw new HttpError(409, 'device_already_claimed');
   await recordAudit(c.env.DB, {
     actorUserId: me.userId,
     roomId,

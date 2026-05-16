@@ -297,31 +297,49 @@ CSRF Origin check skips them (the device isn't a browser; auth is the
   stock firmware hardcodes. Set "Custom Server" in the captive portal
   to `https://cons.social` (no path) and the firmware finds it.
 
-### `GET /api/trmnl/setup` *(MAC handshake)*
+### `GET /api/trmnl/setup` *(MAC handshake — gated)*
 Header: `ID: <MAC>` (colon-separated, e.g. `AA:BB:CC:11:22:33`).
-Returns `{ api_key, friendly_id, ... }`. The `api_key` is a stable UUID
-the device uses as its `Access-Token` for life. Re-calling /setup with
-the same MAC (factory-reset) returns the existing api_key so the
-device's audit history doesn't orphan.
+Optional header: `ACCESS_TOKEN: <api_key>` once the firmware has one.
+
+This endpoint **never hands an api_key to an unauthenticated caller**.
+Stock TRMNL firmware sends no secret beyond the MAC, and MACs are
+printed on every panel — so MAC alone is treated as identity, not a
+credential. Three exits:
+
+1. Firmware presents `ACCESS_TOKEN` that matches the row's `api_key`:
+   re-pair, returns `{status: 200, api_key, friendly_id, ...}`.
+2. Row is in the post-claim pending window (operator just claimed in
+   the dashboard, no Access-Token yet): one-shot hand-off — returns
+   the api_key and closes the window. Subsequent unauth polls revert
+   to the stub.
+3. Otherwise (unknown MAC, paired-but-impostor, or window expired):
+   returns the `status: 202` stub:
+   ```json
+   {"status": 202, "api_key": null, "friendly_id": null,
+    "image_url": "<pair-code splash url>", "filename": "unclaimed",
+    "refresh_rate": 900, "message": "Device awaiting operator claim."}
+   ```
+   Stock firmware accepts the 202 and retries.
+
+The 202 stub's `image_url` points at `/api/device/sign.png?d=<device.id>`
+which renders the rotating 6-char pair-code. Operator reads the code
+off the panel and submits it via `POST /api/rooms/:id/devices/claim`,
+which mints the api_key and opens the 5-minute pending window.
 
 ### `GET /api/trmnl/display` *(device bearer)*
 Headers (per the TRMNL BYOS spec):
-- `ID: <MAC>` — required.
-- `ACCESS_TOKEN: <api_key>` — optional, used as the fast-path lookup.
+- `ID: <MAC>` — optional, ignored for auth.
+- `ACCESS_TOKEN: <api_key>` — **required**. Returns `401 unknown_device`
+  without it; MAC fallback was removed because MAC isn't a credential.
 - Optional telemetry: `BATTERY_VOLTAGE`, `PERCENT_CHARGED`, `RSSI`,
   `FW_VERSION`, `MODEL`, `WIDTH`, `HEIGHT`. The first five are
   persisted on the device row when present; `WIDTH`/`HEIGHT` override
   the default 800×480 in the returned image URL.
 
-If `ACCESS_TOKEN` is present and resolves, it wins. Otherwise the
-server falls back to `ID` (MAC) and lazy-creates the device row if
-needed — so a device that lost its api_key can recover without
-re-running /setup.
-
 Returns TRMNL's expected JSON envelope:
 ```json
 {
-  "filename": "sign-<prefix>-<bucket>.png",
+  "filename": "sign-<prefix>-<state>-<bucket>.png",
   "image_url": "https://cons.social/api/device/sign.png?d=<api_key>&fmt=png&w=800&h=480",
   "refresh_rate": 300
 }
@@ -331,8 +349,7 @@ Returns TRMNL's expected JSON envelope:
 devices get the 5-minute rate so the rotating OTP code stays fresh.
 
 ### `POST /api/trmnl/log` *(device bearer)*
-Headers: `ID: <MAC>` (primary identifier per the spec) or
-`ACCESS_TOKEN: <api_key>` (alternative).
+Headers: `ACCESS_TOKEN: <api_key>` — required (no MAC fallback).
 Body: a JSON array of log records — each may contain
 `message`, `wifi_status`, `created_at`, `sleep_duration`,
 `refresh_rate`, `free_heap_size`, `max_alloc_size`, `source_path`,

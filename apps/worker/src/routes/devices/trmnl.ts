@@ -14,6 +14,9 @@ import { Hono } from 'hono';
 import type { Env } from '../../types.js';
 import { HttpError } from '../../errors.js';
 import {
+  consumePendingApiKey,
+  getDevice,
+  getDeviceByApiKey,
   getDeviceWithCon,
   getOrCreateDeviceByMac,
   updateDeviceTelemetry,
@@ -44,23 +47,42 @@ function parseInt32(s: string | undefined): number | null {
 /**
  * GET /api/trmnl/setup
  *
- * First-boot handshake. TRMNL sends its MAC address in the `ID` header;
- * we either return the existing api_key for that MAC (re-pair after
- * factory reset) or mint a new device row.
+ * TRMNL firmware sends `ID: <MAC>` here. The stock protocol provides
+ * no other authenticator on this endpoint, so we treat MAC as a
+ * non-secret identity claim, not a credential. There are three exits:
  *
- * Response shape matches TRMNL's BYOS contract.
+ *   - Firmware already has its `api_key` and presents matching
+ *     `ACCESS_TOKEN`: re-pair from the same device. Return the key.
+ *   - Row was just claimed (claim opened a short pending window) and
+ *     this is the first poll inside the window: hand the key off,
+ *     close the window. The device records it and starts polling
+ *     /display.
+ *   - Otherwise: return a `status: 202` stub. Stock firmware accepts
+ *     that and retries — used for both "never claimed" and "MAC seen
+ *     but you're not who you claim to be" (no Access-Token, no pending
+ *     window). The stub keeps the same response shape so the firmware
+ *     parses it cleanly.
+ *
+ * Bootstrapping a new device looks like:
+ *   1. Boot → /setup → 202 stub → firmware retries.
+ *   2. Admin types pair code in dashboard → server mints the device's
+ *      api_key + opens a 5-min pending window.
+ *   3. Device's next /setup poll inside the window picks up the key.
+ *   4. Window closes. Subsequent /setup polls only succeed when the
+ *      firmware presents `ACCESS_TOKEN`.
  */
 trmnlRoutes.get('/setup', async (c) => {
   const mac = (c.req.header('ID') ?? '').trim().toUpperCase();
   if (!mac || !macRegex.test(mac)) {
     throw new HttpError(400, 'invalid_mac', 'ID header must be a colon-separated MAC');
   }
+  const accessToken = (c.req.header('ACCESS_TOKEN') ?? '').trim();
 
   const { id: deviceId, created } = await getOrCreateDeviceByMac(c.env.DB, mac);
   if (created) {
     // First-contact forensics: no actor user (the device beat any human
     // to the punch) and no room yet, but we record the MAC so an admin
-    // can correlate the device's UUID to a physical panel later.
+    // can correlate the device's internal UUID to a physical panel.
     await recordAudit(c.env.DB, {
       actorUserId: null,
       roomId: null,
@@ -69,30 +91,75 @@ trmnlRoutes.get('/setup', async (c) => {
       metadata: { mac },
     });
   }
-  return c.json({
+
+  const row = await getDevice(c.env.DB, deviceId);
+  if (row?.api_key && accessToken && accessToken === row.api_key) {
+    // Re-pair from the same device. Firmware already has the key; we're
+    // just confirming the bootstrap completed.
+    return c.json(setupResponse(row.api_key));
+  }
+
+  // No matching Access-Token — only the post-claim pending window can
+  // hand the key out. The query clears the window on hit, so this is
+  // single-use across the whole keyspace and there's no second chance
+  // for a racer once the legitimate device polls.
+  const pending = await consumePendingApiKey(c.env.DB, deviceId);
+  if (pending) {
+    return c.json(setupResponse(pending));
+  }
+
+  // Unclaimed device, or paired-but-impostor caller. Either way: keep
+  // the firmware idling on /setup until an admin acts. Hand it an
+  // image_url for the pair-code screen so the corridor sees the OTP
+  // an operator needs to type into the dashboard.
+  return c.json(setupStub(deviceId, new URL(c.req.url).origin));
+});
+
+function setupResponse(apiKey: string): Record<string, unknown> {
+  return {
     status: 200,
-    api_key: deviceId,
+    api_key: apiKey,
     // TRMNL displays this in their dashboard / firmware logs to help
-    // humans disambiguate panels. First 8 of the UUID is enough.
-    friendly_id: deviceId.slice(0, 8).toUpperCase(),
+    // humans disambiguate panels. First 8 of the api_key is enough
+    // and doesn't leak the secret.
+    friendly_id: apiKey.slice(0, 8).toUpperCase(),
     image_url: null,
     filename: null,
     message: 'Welcome to con-sign.',
-  });
-});
+  };
+}
+
+function setupStub(deviceId: string, origin: string): Record<string, unknown> {
+  // The pair-code screen is rendered by /api/device/sign.png and keyed
+  // on device.id. Pre-claim that lookup is safe: device.id grants no
+  // access beyond the public OTP image (api_key is the credential and
+  // is still NULL). Once a claim mints api_key, /sign.png stops
+  // accepting device.id and only honors api_key — so this URL stops
+  // working the moment it would expose sensitive content.
+  const img = new URL('/api/device/sign.png', origin);
+  img.searchParams.set('d', deviceId);
+  img.searchParams.set('fmt', 'png');
+  img.searchParams.set('w', '800');
+  img.searchParams.set('h', '480');
+  return {
+    status: 202,
+    api_key: null,
+    friendly_id: null,
+    image_url: img.toString(),
+    filename: 'unclaimed',
+    refresh_rate: 900,
+    message: 'Device awaiting operator claim.',
+  };
+}
 
 /**
  * GET /api/trmnl/display
  *
- * Hot loop. TRMNL polls this with two identifying headers:
- *   - `ID`            — the device's MAC (always present).
- *   - `ACCESS_TOKEN`  — the api_key we issued at /setup (present once
- *                       the device has flashed its config).
- *
- * If ACCESS_TOKEN is set, trust it (faster path; one indexed UUID
- * lookup). Otherwise fall back to MAC — useful for the device's very
- * first /display call before it's stored the api_key, and as a
- * resilience net if its config gets cleared.
+ * Hot loop. TRMNL firmware polls with `ACCESS_TOKEN: <api_key>` once
+ * it's been through the /setup bootstrap. There's no MAC fallback —
+ * before claim the firmware has no key and should stay on /setup;
+ * after claim it has the key and uses it. Anything else is treated
+ * as unknown and returns 401, which the firmware backs off from.
  *
  * Returns TRMNL's expected JSON envelope; `image_url` points at our
  * generic /api/device/sign.png so the unpaired/paired/revoked
@@ -100,24 +167,10 @@ trmnlRoutes.get('/setup', async (c) => {
  */
 trmnlRoutes.get('/display', async (c) => {
   const apiKey = (c.req.header('ACCESS_TOKEN') ?? '').trim();
-  const mac = (c.req.header('ID') ?? '').trim().toUpperCase();
-
-  let deviceId: string | null = null;
-  if (apiKey) {
-    const found = await getDeviceWithCon(c.env.DB, apiKey);
-    if (found) deviceId = apiKey;
-  }
-  if (!deviceId && mac && macRegex.test(mac)) {
-    // No ACCESS_TOKEN, or it didn't resolve — fall back to MAC. Lazy-
-    // create on first contact so a device that lost its api_key can
-    // recover without going through /setup again. We don't audit
-    // here; /setup is the canonical first-contact event, and a
-    // device that bypassed it and landed on /display first is rare
-    // enough that we'd rather log the anomaly via wrangler tail than
-    // pollute the audit table.
-    ({ id: deviceId } = await getOrCreateDeviceByMac(c.env.DB, mac));
-  }
-  if (!deviceId) throw new HttpError(401, 'unknown_device');
+  if (!apiKey) throw new HttpError(401, 'unknown_device');
+  const lookup = await getDeviceByApiKey(c.env.DB, apiKey);
+  if (!lookup) throw new HttpError(401, 'unknown_device');
+  const deviceId = lookup.id;
 
   const found = await getDeviceWithCon(c.env.DB, deviceId);
   if (!found) throw new HttpError(401, 'unknown_device');
@@ -144,6 +197,7 @@ trmnlRoutes.get('/display', async (c) => {
 
   const envelope = buildDisplayEnvelope({
     deviceId,
+    apiKey,
     origin: new URL(c.req.url).origin,
     con:
       found.con_start_date && found.con_end_date
@@ -167,18 +221,14 @@ trmnlRoutes.get('/display', async (c) => {
  * Truncate to LOG_MAX_BYTES so a noisy panel can't blow up KV.
  */
 trmnlRoutes.post('/log', async (c) => {
-  // Per the TRMNL spec, /log carries the device's MAC in `ID` and is
-  // the primary identifier. ACCESS_TOKEN is accepted as an alternative
-  // for symmetry with /display.
+  // Per /display: only an Access-Token gets you in. The MAC alone is
+  // never a credential — it's printed on every panel and routinely
+  // visible to anyone on the same Wi-Fi.
   const apiKey = (c.req.header('ACCESS_TOKEN') ?? '').trim();
-  const mac = (c.req.header('ID') ?? '').trim().toUpperCase();
-
-  let deviceId: string | null = null;
-  if (apiKey) deviceId = apiKey;
-  else if (mac && macRegex.test(mac)) {
-    ({ id: deviceId } = await getOrCreateDeviceByMac(c.env.DB, mac));
-  }
-  if (!deviceId) throw new HttpError(401, 'unknown_device');
+  if (!apiKey) throw new HttpError(401, 'unknown_device');
+  const lookup = await getDeviceByApiKey(c.env.DB, apiKey);
+  if (!lookup) throw new HttpError(401, 'unknown_device');
+  const deviceId = lookup.id;
 
   const text = (await c.req.text()).slice(0, LOG_MAX_BYTES);
   await c.env.SESSIONS.put(`${LOG_KV_PREFIX}${deviceId}`, text, {

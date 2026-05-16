@@ -28,7 +28,18 @@ export interface TrmnlDisplayEnvelope {
 export type DeviceRenderState = 'paired' | 'revoked' | 'unpaired';
 
 export interface BuildEnvelopeArgs {
+  /**
+   * Internal device row id (PK). Used as the cache-key namespace in
+   * `filename` so two devices never share a frame. Not the credential.
+   */
   deviceId: string;
+  /**
+   * The firmware-facing api_key. Goes into the image_url so /sign.png
+   * can authorize the fetch against the device row. The stock TRMNL
+   * firmware fetches image_url anonymously — no auth headers — so the
+   * URL has to self-authenticate.
+   */
+  apiKey: string;
   /** Absolute URL of the worker. Used to construct image_url. */
   origin: string;
   /** The room's con dates, if the device is paired to a room. */
@@ -50,7 +61,7 @@ export interface BuildEnvelopeArgs {
 }
 
 export function buildDisplayEnvelope(args: BuildEnvelopeArgs): TrmnlDisplayEnvelope {
-  const { deviceId, origin, con, state, width = 800, height = 480 } = args;
+  const { deviceId, apiKey, origin, con, state, width = 800, height = 480 } = args;
   const now = args.now ?? new Date();
   const refresh_rate = nextRefreshSec(con, now);
 
@@ -63,7 +74,7 @@ export function buildDisplayEnvelope(args: BuildEnvelopeArgs): TrmnlDisplayEnvel
   const filename = `sign-${deviceId.slice(0, 8)}-${stateTag}-${bucket}.png`;
 
   const url = new URL('/api/device/sign.png', origin);
-  url.searchParams.set('d', deviceId);
+  url.searchParams.set('d', apiKey);
   url.searchParams.set('fmt', 'png');
   url.searchParams.set('w', String(width));
   url.searchParams.set('h', String(height));

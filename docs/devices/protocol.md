@@ -61,8 +61,8 @@ device's current row in the `device` table:
 
 | Server state | Render | What to display |
 |---|---|---|
-| No row | Unpaired panel with a rotating 6-char OTP code | The OTP. Don't store it; it rotates every 5 minutes. |
-| `room_id` set | Paired room sign | Room name, con (with local clock + day counter), roommates with public-tier fields. |
+| No row, or `room_id IS NULL` and `revoked_at IS NULL` | Unpaired panel with a rotating 6-char OTP code | The OTP. Don't store it; it rotates every 5 minutes. |
+| `room_id` set, `revoked_at IS NULL` | Paired room sign | Room name, con (with local clock + day counter), roommates with public-tier fields. |
 | `revoked_at` set, `last_seen_at` NULL | Revoked notice | "Panel unpaired by a room admin." Shown once. |
 | `revoked_at` set, `last_seen_at` non-NULL | Self-healed unpaired | Back to the OTP screen; admin re-claims to recover. |
 
@@ -72,6 +72,27 @@ every subsequent poll falls through to the unpaired branch so the
 panel never gets stuck on a dead-end screen. `revoked_at` stays set
 forever as an audit trail. The device doesn't participate in the
 state change — it just keeps polling.
+
+## Credentials
+
+Two separate identifiers, both UUIDs:
+
+- **`device.id`** — internal row PK, generated server-side on first
+  contact. Used as the URL bearer (`?d=<id>` on `/sign.png`) only
+  for unclaimed devices, so the panel can render its pair-code
+  screen before any operator action.
+- **`device.api_key`** — firmware-facing credential. NULL until the
+  device has been claimed; minted by the claim handler and rotated
+  on every re-claim. Required as `ACCESS_TOKEN` on `/api/trmnl/display`
+  and `/api/trmnl/log`. Once a device has an `api_key`, `device.id`
+  stops working as a `/sign.png` bearer — the firmware uses the
+  `api_key` exclusively.
+
+This split closes a vulnerability where the bare TRMNL `/setup`
+protocol would have returned a paired panel's credential to anyone
+who could present its MAC address. The `api_key` is only released
+through the post-claim pending window or to a caller already holding
+it (re-pair from the same device).
 
 ## Poll cadence
 
