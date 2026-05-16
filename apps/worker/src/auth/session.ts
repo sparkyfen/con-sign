@@ -17,6 +17,14 @@ const SESSION_TTL_SEC = 30 * 24 * 60 * 60;
 const UNLOCK_TTL_SEC = 24 * 60 * 60;
 
 export const SESSION_COOKIE = 'cs_session';
+/**
+ * Anonymous-visitor cookie. Minted on the first `/api/r/:slug` view
+ * and stable for the duration of the visitor's browser session. Used
+ * (a) as the unlock-attempt rate-limit key for that visitor and (b)
+ * as the avatar-proxy rate-limit key so hotel NAT doesn't collapse
+ * an entire venue's traffic into one bucket.
+ */
+export const VISITOR_ID_COOKIE = 'cs_visitor';
 export const unlockCookieName = (roomId: string): string => `cs_unlock_${roomId}`;
 
 export interface UserSessionPayload {

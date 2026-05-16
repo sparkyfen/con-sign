@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import { fetchTelegramAvatar } from '../auth/telegram.js';
+import { VISITOR_ID_COOKIE, readCookie } from '../auth/session.js';
 
 /**
  * Public avatar proxy. Telegram avatars require a bot-token URL we don't want
@@ -13,11 +14,14 @@ import { fetchTelegramAvatar } from '../auth/telegram.js';
  *      for a paired room's avatars hit the cache and never touch the Bot
  *      API. `cache.put` runs via executionCtx.waitUntil so it doesn't
  *      block the cold response.
- *   2. **Per-IP rate limit** on cache misses (AVATAR_RL, 60/60s). A
- *      scraper walking sequential tg user_ids would burn Bot API quota
- *      otherwise. Hotel-NAT-style shared IPs aren't a concern here
- *      because legitimate viewers of the same room hit the cache, not
- *      this fallback.
+ *   2. **Per-visitor rate limit** on cache misses (AVATAR_RL). Keyed
+ *      on the `cs_visitor` cookie minted by `/api/r/:slug`, falling
+ *      back to `CF-Connecting-IP` for direct API hits without a
+ *      cookie. Per-visitor keying is the NAT-safe choice — hundreds
+ *      of attendees on the same hotel Wi-Fi each get their own
+ *      bucket instead of collectively saturating the venue IP's
+ *      bucket on cold start. The unauth/no-cookie path falls through
+ *      to IP, which retains the original Bot-API-quota guard.
  */
 export const avatarRoutes = new Hono<Env>();
 
@@ -27,9 +31,15 @@ avatarRoutes.get('/tg/:tgUserId{[0-9]+}', async (c) => {
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
-  // Cache miss: rate-limit by IP before talking to Telegram.
-  const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
-  const rl = await c.env.AVATAR_RL.limit({ key: `avatar:${ip}` });
+  // Cache miss: rate-limit before talking to Telegram. Prefer the
+  // per-visitor cookie key; fall through to IP only when no cookie
+  // is present (direct API hits, bots, etc.) so a single venue's
+  // attendees don't share one bucket.
+  const visitorId = readCookie(c.req.header('Cookie'), VISITOR_ID_COOKIE);
+  const rlKey = visitorId
+    ? `avatar:v:${visitorId}`
+    : `avatar:ip:${c.req.header('CF-Connecting-IP') ?? 'unknown'}`;
+  const rl = await c.env.AVATAR_RL.limit({ key: rlKey });
   if (!rl.success) throw new HttpError(429, 'avatar_rate_limited');
 
   const tgUserId = Number(c.req.param('tgUserId'));

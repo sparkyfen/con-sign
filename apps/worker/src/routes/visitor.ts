@@ -8,6 +8,7 @@ import {
 import type { Env } from '../types.js';
 import { HttpError } from '../errors.js';
 import {
+  VISITOR_ID_COOKIE,
   buildCookie,
   isSecureRequest,
   newUnlockSession,
@@ -23,7 +24,6 @@ import { getVisibility, listRoommatesForRoom, roommateRowToApi } from '../db/que
 
 export const visitorRoutes = new Hono<Env>();
 
-const VISITOR_ID_COOKIE = 'cs_visitor';
 const VISITOR_ID_TTL_SEC = 90 * 24 * 60 * 60; // 90 days
 const TURNSTILE_THRESHOLD = 3;
 const FAIL_COUNTER_TTL_SEC = 60 * 60; // 1h sliding window

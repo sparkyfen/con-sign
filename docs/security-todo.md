@@ -12,6 +12,19 @@ Severity scale:
 
 ---
 
+## ~~H0. `/api/trmnl/setup` returned api_key on any MAC handshake~~ ✅ landed `407b6cc`
+
+`device.api_key` is now a separate column from `device.id` (migration
+`0009_device_api_key.sql`). `/setup` returns a `status: 202` "awaiting
+claim" stub by default and only releases the api_key when (a) the
+request presents matching `ACCESS_TOKEN` (re-pair) or (b) a 5-minute
+post-claim pending window is open (one-shot hand-off). `/display` and
+`/log` require `ACCESS_TOKEN`; MAC fallback removed. `claimDevice`
+rotates the api_key on every successful claim so a prior holder
+can't ride into a new pairing. Smoke-verified in prod.
+
+---
+
 ## ~~H1. `POST /api/rooms/:id/devices/claim` is not rate-limited~~ ✅ landed `2c0cc18`
 
 New `CLAIM_RL` binding (namespace 1002, 30 attempts/60s, keyed by userId).
@@ -106,6 +119,132 @@ that's a manual lever.
 **Fix.** Already designed in PLAN.md as a stretch item: identity-tied
 ACLs that augment passcodes with allowlists keyed off `identity`.
 Tracked separately from this doc.
+
+---
+
+## ~~M4. `AVATAR_RL` keyed on IP — hotel-NAT fragile during a con~~ ✅ landed (this session)
+
+Rate-limit now keys on the `cs_visitor` cookie minted by `/api/r/:slug`
+(`apps/worker/src/routes/avatar.ts:32-37`). Hundreds of attendees on
+one venue Wi-Fi each get their own bucket. Cookieless / direct-API
+hits fall through to `avatar:ip:<CF-Connecting-IP>` as the original
+Bot-API-quota guard. Budget dropped from 60/60s to 30/60s — generous
+per-visitor since the edge cache absorbs every duplicate before this
+limiter is reached. Cookie name centralized in `auth/session.ts` as
+`VISITOR_ID_COOKIE`.
+
+---
+
+## M5. `/api/trmnl/setup` has no rate-limit (storage growth only)
+
+**State.** Now that `/setup` returns a 202 stub instead of credentials
+(`407b6cc`), an attacker spamming arbitrary MACs can no longer
+extract auth tokens. But each unique MAC still creates an unclaimed
+`device` row.
+
+**Risk.** Storage growth. The daily stale-device cron (`runStaleDeviceCleanup`)
+GCs rows quiet ≥90 days, so absent active sustained spam, growth is
+self-healing. Worker invocation cost is per-request, edge-absorbed.
+Low impact pre-launch.
+
+**Fix options.**
+- Skip — let the 90-day cron handle it, accept the noise floor.
+- Add a *per-(IP, MAC)* zone Rate Limiting Rule (NAT-safe because
+  each panel has a unique MAC) e.g. 1 setup-request per minute per
+  (IP, MAC). Avoids punishing multiple panels arriving at the same
+  venue.
+
+**Effort.** Skip: 0. Add: ~15 min Cloudflare dashboard config.
+
+---
+
+## M6. `/api/auth/{bsky,telegram}` has no rate-limit
+
+**State.** Both login start/callback endpoints rely solely on
+Cloudflare-edge absorption. No app-level limit; no Turnstile gate.
+
+**Risk.** Burns Worker CPU during a flood; no credential leak (the
+OAuth state/HMAC checks fail closed). Realistic exploit is more
+nuisance than compromise.
+
+**Fix options.**
+- **A:** Add Turnstile to the `/api/auth/bsky/start` and
+  `/api/auth/telegram` POST. Same asymmetric-cost pattern as the
+  visitor unlock retry.
+- **B:** Cloudflare JA3/JA4 fingerprint Rate Limit Rule (NAT-safe;
+  distinguishes individual browsers behind one IP). Requires a Pro
+  zone for the fingerprint feature — we're Free today.
+- **C:** Skip — accept the flood as an availability concern handled
+  by the edge.
+
+**Effort.** A: ~1 h (already have Turnstile plumbing on the unlock
+path). B: requires zone upgrade. C: 0.
+
+---
+
+## L3. BSky link flow has no explicit "are you linking?" confirmation
+
+**State.** `/api/auth/bsky/start` infers link-vs-login intent from
+the presence of a `cs_session` cookie. If a logged-in user clicks a
+crafted start URL with `?handle=<attacker handle>`, the callback
+attaches the attacker's identity to the victim's user record (via
+`linkToUserId`), enabling subsequent attacker-side login as victim.
+
+**Risk.** Practical exploit requires the victim to complete a
+BlueSky consent flow as an attacker-controlled handle — which means
+the victim would need to log into BSky AS the attacker. The
+`IdentityCollisionError` path catches the case where the attacker's
+DID is already linked to someone else. Real-world likelihood is
+very low absent significant social engineering.
+
+**Fix options.**
+- **A:** Add an explicit dashboard "Link account" affordance that
+  generates a short-TTL nonce; `/start` only accepts the link
+  intent when that nonce is present. The bare URL becomes
+  login-only.
+- **B:** Show a confirmation page after the callback when
+  `linkToUserId` was set, requiring the user to click "yes, link
+  this account."
+- **C:** Skip — accept the low-likelihood risk.
+
+**Effort.** A: ~half-day with frontend work. B: ~2 h.
+
+---
+
+## L4. Pair-code KV consumption is not strictly atomic across reads
+
+**State.** `consumePairCode` (`apps/worker/src/auth/pair-code.ts:67`)
+does a get-then-delete sequence. Two concurrent claim requests for
+the same code could both observe the device_id before either delete
+lands.
+
+**Risk.** Race collapses at the DB layer: `claimDevice`'s
+`ON CONFLICT(id) DO UPDATE … WHERE device.room_id IS NULL OR
+revoked_at IS NOT NULL` makes only one INSERT/UPDATE succeed; the
+loser gets `meta.changes === 0` → 409 `device_already_claimed`. So
+double-pairing can't actually happen; the KV race is cosmetic.
+
+**Fix.** None needed. Documented here so future work that decouples
+the DB step doesn't inadvertently widen the window.
+
+---
+
+## Intentional behaviors (not vulnerabilities)
+
+- **Revoked devices retain a working `api_key`** for `/sign.png`
+  and `/log`. By design — the firmware needs to authenticate to
+  render the revoke notice and self-heal. The credential rotates
+  on re-claim (`claimDevice` overwrites `api_key`), so prior
+  holders get cut off the moment a new pairing happens. State
+  classifier owns this in `apps/worker/src/devices/state.ts`.
+- **Telegram payload zod schema strips unknown fields.** If
+  Telegram adds a payload field in future, HMAC verification fails
+  closed (the data-check-string excludes the new field but
+  Telegram included it in the hash). Denial of the new field's
+  flow, never a bypass.
+- **MAC alone is not a credential anywhere** (see H0). MAC is
+  printed on panel chassis and visible on Wi-Fi; the codebase
+  treats it as identity only.
 
 ---
 

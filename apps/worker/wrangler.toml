@@ -59,16 +59,18 @@ type = "ratelimit"
 namespace_id = "1002"
 simple = { limit = 30, period = 60 }
 
-# Per-IP cap on /api/avatar/tg/:id cache misses. Defends Bot API quota
-# from a scraper walking sequential ids. Hotel-NAT concern (one IP =
-# many users) doesn't bite here because legitimate viewers all hit the
-# same handful of cached avatars per room — the rate-limit only sees
-# the unique-id flood pattern. 60/60s is well above any real session.
+# Per-visitor cap on /api/avatar/tg/:id cache misses, keyed on the
+# `cs_visitor` cookie minted by /api/r/:slug. Falls back to IP for
+# cookieless hits (direct API). Per-visitor keying is the NAT-safe
+# choice — hundreds of con attendees on the same hotel Wi-Fi each
+# get their own bucket instead of collectively saturating the venue
+# IP's bucket on cold start. 30/60s is generous given the edge
+# cache absorbs every duplicate before we ever reach this limiter.
 [[unsafe.bindings]]
 name = "AVATAR_RL"
 type = "ratelimit"
 namespace_id = "1003"
-simple = { limit = 60, period = 60 }
+simple = { limit = 30, period = 60 }
 
 # ─── Cron Trigger (daily ICS sync from furrycons.com) ──────────────────────
 [triggers]
