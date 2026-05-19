@@ -314,50 +314,146 @@ edit own visibility.
 
 - **Roommate-to-roommate notes.** Shared in-room scratchpad visible
   only to logged-in roommates of the room — never to visitors, never
-  on the panel. New table `room_note (id, room_id, author_user_id,
-  body, created_at)` with ~280 char body cap and a cap of ~20 entries
-  per room (oldest TTLs out). Reads + writes gated by
-  `requireRoommate`. Members can delete their own entries; admins
-  can delete any. No panel surface; this is dashboard-only.
-- **Room template.** Per-admin reusable bundle of room shape +
-  invitee list. "Save as template" snapshots the current room
-  (name pattern, roommate user_id list, default per-field
-  visibility, default status presets) into a `room_template`
-  table; "Create room from template" picks a con and instantiates
-  the room + sends invites to the same handles. Snapshot
-  semantics — editing the template doesn't mutate live rooms.
-  Composes with **Carry-over profile** below: template knows
-  *who*, carry-over knows *what each person looks like*.
+  on the panel.
+  - **Shape**: two surfaces. (a) One *pinned blob* per room
+    (wiki-style, last-edit-wins) for evergreen info — Wi-Fi
+    password, allergies, hotel breakfast. (b) A *feed of transient
+    entries* below for moment-to-moment notes ("out for tea",
+    "left key on counter").
+  - **Schema**: `room.pinned_note TEXT` column for the blob (≤1 KB)
+    + new `room_note (id, room_id, author_user_id, body ≤280,
+    created_at)` table for the feed. Feed capped at 50 entries
+    per room, oldest TTLs out on insert.
+  - **Access**: reads + writes gated by `requireRoommate`. Authors
+    can delete their own feed entries; admins can delete any.
+    Pinned blob: any roommate can edit; last-edit-wins.
+  - **Notifications**: new feed entries fire a Telegram DM to each
+    other roommate who has opted in. Routes through the planned
+    **Admin notifications** channel below — this feature depends
+    on that infra landing first (or shipping together).
+  - **Surface placement** in the dashboard: defer to the design AI.
+    Backend doesn't block on UI choice.
+- **Room template.** Per-admin reusable bundle. Unlimited
+  templates per admin; private only (no cross-admin sharing in
+  v1).
+  - **What it captures**: room name pattern, invitee handle list
+    (BSky/Telegram), per-field visibility defaults, and a
+    "use con-local timezone" hint that picks up the destination
+    con's `con.timezone` at instantiation. **Does NOT snapshot
+    invitee profiles** — at instantiation, each invitee's fursona
+    / species / pronouns / avatar are pulled from their latest
+    identity + roommate row via the **Carry-over profile** flow
+    below. This means a template stays fresh as people's profiles
+    evolve.
+  - **Schema**: new `room_template (id, owner_user_id, name_pattern,
+    contents_json, created_at, updated_at)` table where
+    `contents_json` carries `{ invitees: [{handle, provider}],
+    visibility_defaults: {...} }`. Normalize later if querying
+    individual invitees becomes a hot path.
+  - **Instantiation flow**: admin picks a con → server creates the
+    room + stages each invite in a **pending** state on a new
+    `pending_invite` table → admin reviews on a "send invites"
+    screen and fires them off (one-by-one or bulk). Lets the admin
+    drop people who aren't coming this year before sending.
+  - **Stale invitee handling**: if any handle on the template no
+    longer resolves to a user at instantiation, the operation
+    **hard-fails** with a list of broken handles. Admin must edit
+    the template (or accept the drops by removing them) before
+    retrying. Strictness here avoids silent surprise drop-outs.
+  - Composes with **Carry-over profile** below: template knows
+    *who*, carry-over knows *what each person looks like*.
 - **Carry-over profile.** Per-USER, not per-room. When a user
   joins any new room, the roommate row pre-populates from their
-  most recent roommate row in any prior room — fursona name /
-  species / pronouns, status presets, per-field visibility
-  defaults, avatar choice. Distinct from room template (which
-  knows the invitees, not the profiles). No new schema; extend
-  the `addRoommate` insert to look up the most recent prior
-  roommate row by `user_id` and copy the profile fields, the
-  same way migration 0006 already does for handles.
-- **Admin notifications.** Per-admin alerts on conditions like
-  panel offline >2 h *during the con window*, battery <15%,
-  `last_seen_at` stale >24 h, repeated failed claim attempts.
-  Per-admin preferences (kind + threshold + quiet hours in
-  con-local TZ). Delivery via **Telegram bot DM** at v1 (we
-  already have `TG_BOT_TOKEN` + Bot API plumbing); email lands
-  later when we add an SMTP provider. New tables
-  `notification_pref` and `notification_log`. Cron checks room +
-  device state on a 10-min cadence during the con window, then
-  reverts to the standard daily ICS cron rhythm.
+  *most recent* prior roommate row (by `created_at`, regardless
+  of which con).
+  - **Trigger**: implicit. Always copies; the user can edit
+    afterwards. Matches the existing `bsky_handle` /
+    `telegram_handle` auto-populate from migration 0006.
+  - **Fields carried**: `fursona_name`, `fursona_species`,
+    `pronouns`, status presets (custom labels the user defined),
+    per-field visibility defaults, avatar URL choice (which
+    identity's avatar to render).
+  - **Schema**: no new tables. Extend `addRoommate` and
+    `createRoomWithAdmin` to look up the most recent prior
+    `roommate` row by `user_id` and copy the listed columns.
+    Identity-derived fields (handles) continue to be set from
+    `identity.handle` as today.
+  - **No source backref**: the new row doesn't remember which
+    prior room it copied from. If we ever want a "reset to
+    last profile" affordance, that's a separate query against
+    `roommate` ordered by `created_at`.
+  - Distinct from room template above: template knows the
+    invitees; carry-over knows what each invitee's profile
+    looks like at the moment they join.
+- **Admin notifications.** Per-room alerts to the admin
+  (per-room, not per-admin — an admin who owns multiple rooms
+  configures each independently). Delivery via **Telegram bot
+  DM** at v1; email lands later when we add an SMTP provider.
+  - **Default rule set** (all on by default for every new room):
+    1. **Panel offline > 2 h** during the con window
+       (`last_seen_at` stale).
+    2. **Panel battery < 15%**.
+    3. **Roommate stale status > 24 h** during the con window.
+    4. **Repeated failed claim attempts** on this room's
+       pair-code (>5 in 10 min).
+  - **Con window** = strictly `con.start_date` to `con.end_date`
+    in `con.timezone`. Outside the window the rules go silent.
+    Matches the existing refresh-rate cadence logic.
+  - **Quiet hours**: default **OFF**. Admin opts in if they want
+    night-time quieting. Critical alerts (offline/battery/
+    security) still go out 24/7 within the con window.
+  - **Schema**: new `notification_pref (id, room_id,
+    actor_user_id, kind, enabled, threshold_json, quiet_start,
+    quiet_end, created_at, updated_at)` and `notification_log
+    (id, pref_id, fired_at, payload_json, delivery_status)`.
+  - **Cron cadence**: when the daily ICS cron fires, also check
+    rooms whose con is currently in-window and queue alerts. For
+    sub-day responsiveness during the con, add a second cron at
+    10-min cadence that only iterates rooms with an in-window
+    con (cheap query). Falls silent outside con windows.
+  - **Channel infra**: existing `TG_BOT_TOKEN` + Bot API used to
+    fetch avatars works for `sendMessage` too. Each admin links
+    their Telegram identity via the existing login flow before
+    they can receive DMs.
 - **Virtual guest book.** After a visitor unlocks a roommate's
   card via passcode, they're offered a "sign the guest book"
-  prompt — short message + handle (their logged-in
-  BSky/Telegram handle if present, otherwise typed plaintext).
-  New table `guest_book_entry (id, room_id, visitor_identity_id
-  NULL, display_handle, message, created_at)`. Default
-  visibility: roommates only (dashboard view); optional toggle
-  to "show to other visitors of this room." Same per-cookie
-  rate limit as unlock attempts. Panel optionally shows a
-  numeric `N visitors today` count (no names) at the admin's
-  discretion.
+  prompt.
+  - **Identity required to sign.** Visitors must be logged in via
+    BSky or Telegram before they can leave a message. **No
+    plaintext-handle anonymous entries** — the identity gate
+    keeps profanity / spam / impersonation off the wall by
+    making every signer accountable through their provider
+    identity. Anonymous-but-read access is still fine: any
+    passcode-unlocked visitor can *read* the guest book; only
+    logged-in visitors can *write*.
+  - **UX entry path for un-logged-in visitors**: after unlock,
+    show a "log in to sign" CTA that routes through the existing
+    BSky/Telegram login with a return-URL back to this room's
+    unlocked view. The login flow currently redirects to `/` —
+    needs to grow a `?return=` param on `/api/auth/bsky/start`
+    and `/api/auth/telegram` before this lands.
+  - **Visibility**: per-room private to roommates. Entries scoped
+    to the room they were signed in; never visible to other
+    visitors, never visible across rooms. Each roommate's card
+    accumulates its own entries.
+  - **Moderation**: each roommate can hide / delete entries on
+    their own card (the signer left it for them, so it's theirs
+    to keep or drop). Admins can delete any entry in any room
+    they own. Audit log records `guest_book.entry_deleted` with
+    the deleted entry's handle + body in metadata.
+  - **Panel surface**: none. Guest book lives only in the
+    dashboard. No count, no last-visitor name on the e-ink.
+  - **Schema**: new `guest_book_entry (id, room_id,
+    roommate_id, signer_identity_id, body ≤280, created_at,
+    deleted_at NULL, deleted_by_user_id NULL)`. Soft-delete
+    rather than hard-delete so we keep the moderation audit
+    trail. The `signer_identity_id` is FK to `identity`, so
+    we resolve handle + provider at read time and pick up
+    any handle changes for free.
+  - **Rate limit**: same per-visitor-cookie bucket as unlock
+    attempts (`UNLOCK_RL`). Logged-in signers add their session
+    `userId` as an additional dimension so a single user
+    spamming across rooms also gets capped.
 
 **Code-quality follow-ups (from simplification reviews):**
 
