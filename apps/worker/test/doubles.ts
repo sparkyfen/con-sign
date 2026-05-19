@@ -90,6 +90,12 @@ export function createD1(): D1Database {
     '0008_drop_identity_raw_profile.sql',
     '0009_device_api_key.sql',
     '0010_room_notes.sql',
+    // NOTE: 0012_drop_admin_notifications.sql is intentionally omitted.
+    // It cleans up columns/tables that migration 0011 added in prod,
+    // but 0011 was reverted before tests adopted it — so the test DB
+    // has nothing to drop. Running 0012 here would fail (DROP COLUMN
+    // has no IF EXISTS clause in SQLite). 0012 only runs against the
+    // prod DB that already had 0011 applied.
   ]) {
     sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
   }
