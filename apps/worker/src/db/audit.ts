@@ -29,6 +29,8 @@ export const AUDIT_ACTIONS = [
   'roommate.passcode_rotated',
   'roommate.role_changed',
   'roommate.visibility_changed',
+  'room.pinned_note_edited',
+  'room.note_deleted',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

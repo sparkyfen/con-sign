@@ -89,6 +89,7 @@ export function createD1(): D1Database {
     '0007_con_timezone.sql',
     '0008_drop_identity_raw_profile.sql',
     '0009_device_api_key.sql',
+    '0010_room_notes.sql',
   ]) {
     sqlite.exec(readFileSync(join(migrationsDir, file), 'utf8'));
   }

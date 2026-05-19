@@ -888,3 +888,193 @@ export async function rotateRoommatePasscode(
     .run();
 }
 
+
+// ─── room notes (pinned blob + transient feed) ─────────────────────────────
+
+export interface PinnedNoteRow {
+  body: string | null;
+  updated_by_user_id: string | null;
+  updated_by_display_name: string | null;
+  updated_at: string | null;
+}
+
+export interface RoomNoteRow {
+  id: string;
+  room_id: string;
+  author_user_id: string;
+  author_display_name: string;
+  body: string;
+  created_at: string;
+}
+
+/** Hard limit; matches the API-layer cap so the SQL stays defensible
+ * even if a caller bypasses validation. */
+export const FEED_CAP = 50;
+
+export async function getPinnedNote(
+  db: D1Database,
+  roomId: string,
+): Promise<PinnedNoteRow | null> {
+  return db
+    .prepare(
+      `SELECT room.pinned_note AS body,
+              room.pinned_note_updated_by_user_id AS updated_by_user_id,
+              u.display_name AS updated_by_display_name,
+              room.pinned_note_updated_at AS updated_at
+         FROM room
+    LEFT JOIN user u ON u.id = room.pinned_note_updated_by_user_id
+        WHERE room.id = ?`,
+    )
+    .bind(roomId)
+    .first<PinnedNoteRow>();
+}
+
+export async function setPinnedNote(
+  db: D1Database,
+  args: { roomId: string; userId: string; body: string },
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE room
+          SET pinned_note = ?,
+              pinned_note_updated_by_user_id = ?,
+              pinned_note_updated_at = ?
+        WHERE id = ?`,
+    )
+    .bind(args.body, args.userId, new Date().toISOString(), args.roomId)
+    .run();
+}
+
+export async function listRoomNotes(
+  db: D1Database,
+  roomId: string,
+): Promise<RoomNoteRow[]> {
+  // `rowid DESC` is the tiebreaker (not `id DESC`) because the `id`
+  // column is a random UUID — within a same-second cohort that would
+  // order entries arbitrarily. SQLite's implicit `rowid` is always
+  // monotonically increasing per insert, so it gives us a stable
+  // "newest first" order even when `created_at` has second-precision
+  // collisions.
+  const result = await db
+    .prepare(
+      `SELECT n.id, n.room_id, n.author_user_id,
+              u.display_name AS author_display_name,
+              n.body, n.created_at
+         FROM room_note n
+         JOIN user u ON u.id = n.author_user_id
+        WHERE n.room_id = ?
+        ORDER BY n.created_at DESC, n.rowid DESC
+        LIMIT ?`,
+    )
+    .bind(roomId, FEED_CAP)
+    .all<RoomNoteRow>();
+  return result.results ?? [];
+}
+
+/**
+ * Insert a feed entry and TTL out anything beyond the FEED_CAP newest
+ * rows in the same room. Two statements; D1's `batch()` runs them
+ * atomically so a partial write can't leave the room over the cap.
+ */
+export async function createRoomNote(
+  db: D1Database,
+  args: { roomId: string; authorUserId: string; body: string },
+): Promise<string> {
+  const noteId = newId();
+  await db.batch([
+    db
+      .prepare(
+        'INSERT INTO room_note (id, room_id, author_user_id, body) VALUES (?, ?, ?, ?)',
+      )
+      .bind(noteId, args.roomId, args.authorUserId, args.body),
+    db
+      .prepare(
+        // See `listRoomNotes` for why we tiebreak on rowid, not id.
+        `DELETE FROM room_note
+           WHERE room_id = ?
+             AND id NOT IN (
+               SELECT id FROM room_note
+                WHERE room_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT ?
+             )`,
+      )
+      .bind(args.roomId, args.roomId, FEED_CAP),
+  ]);
+  return noteId;
+}
+
+export async function getRoomNote(
+  db: D1Database,
+  noteId: string,
+): Promise<{ id: string; room_id: string; author_user_id: string } | null> {
+  return db
+    .prepare('SELECT id, room_id, author_user_id FROM room_note WHERE id = ?')
+    .bind(noteId)
+    .first<{ id: string; room_id: string; author_user_id: string }>();
+}
+
+export async function deleteRoomNote(db: D1Database, noteId: string): Promise<void> {
+  await db.prepare('DELETE FROM room_note WHERE id = ?').bind(noteId).run();
+}
+
+// ─── notification_pref (shared scaffolding) ────────────────────────────────
+// One row per (recipient_user_id, room_id, kind, source_roommate_id).
+// `kind='room_note'` with `source_roommate_id` set is the only consumer
+// today; the table is designed to absorb Admin-Notifications kinds
+// (panel_offline, battery_low, ...) where source_roommate_id will be NULL.
+
+export interface NotificationPrefRow {
+  id: string;
+  recipient_user_id: string;
+  room_id: string;
+  kind: string;
+  source_roommate_id: string | null;
+  enabled: number; // SQLite returns INTEGER
+}
+
+export async function listRoomNotePrefs(
+  db: D1Database,
+  args: { recipientUserId: string; roomId: string },
+): Promise<NotificationPrefRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT id, recipient_user_id, room_id, kind, source_roommate_id, enabled
+         FROM notification_pref
+        WHERE recipient_user_id = ? AND room_id = ? AND kind = 'room_note'`,
+    )
+    .bind(args.recipientUserId, args.roomId)
+    .all<NotificationPrefRow>();
+  return result.results ?? [];
+}
+
+export async function upsertNotePref(
+  db: D1Database,
+  args: {
+    recipientUserId: string;
+    roomId: string;
+    sourceRoommateId: string;
+    enabled: boolean;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO notification_pref
+         (id, recipient_user_id, room_id, kind, source_roommate_id, enabled,
+          created_at, updated_at)
+       VALUES (?, ?, ?, 'room_note', ?, ?, ?, ?)
+       ON CONFLICT (recipient_user_id, room_id, kind, source_roommate_id)
+       DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
+    )
+    .bind(
+      newId(),
+      args.recipientUserId,
+      args.roomId,
+      args.sourceRoommateId,
+      args.enabled ? 1 : 0,
+      now,
+      now,
+    )
+    .run();
+}
