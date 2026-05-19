@@ -8,6 +8,7 @@ import { conRoutes } from './routes/cons.js';
 import { deviceRoutes } from './routes/device.js';
 import { trmnlRoutes } from './routes/devices/trmnl.js';
 import { meRoutes } from './routes/me.js';
+import { noteRoutes } from './routes/notes.js';
 import { partyRoutes } from './routes/parties.js';
 import { roomRoutes } from './routes/rooms.js';
 import { visitorRoutes } from './routes/visitor.js';
@@ -72,6 +73,7 @@ app.route('/api/cons', conRoutes);
 app.route('/api/me', meRoutes);
 app.route('/api/r', visitorRoutes);
 app.route('/api/rooms', roomRoutes);
+app.route('/api/rooms', noteRoutes);
 app.route('/api/device', deviceRoutes);
 app.route('/api/trmnl', trmnlRoutes);
 // Aliases at the API root for TRMNL stock firmware, which hardcodes
