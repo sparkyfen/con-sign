@@ -314,25 +314,49 @@ edit own visibility.
 
 - **Roommate-to-roommate notes.** Shared in-room scratchpad visible
   only to logged-in roommates of the room — never to visitors, never
-  on the panel.
+  on the panel. Mock: `J2aSJY "Screen / Room Notes"`.
   - **Shape**: two surfaces. (a) One *pinned blob* per room
     (wiki-style, last-edit-wins) for evergreen info — Wi-Fi
     password, allergies, hotel breakfast. (b) A *feed of transient
     entries* below for moment-to-moment notes ("out for tea",
     "left key on counter").
   - **Schema**: `room.pinned_note TEXT` column for the blob (≤1 KB)
-    + new `room_note (id, room_id, author_user_id, body ≤280,
-    created_at)` table for the feed. Feed capped at 50 entries
-    per room, oldest TTLs out on insert.
+    + `room.pinned_note_updated_by_user_id` + `room.pinned_note_updated_at`
+    for the "Last edited by X · Yh ago" footer. New
+    `room_note (id, room_id, author_user_id, body ≤280, created_at)`
+    table for the feed. Feed capped at 50 entries per room, oldest
+    TTLs out on insert.
   - **Access**: reads + writes gated by `requireRoommate`. Authors
-    can delete their own feed entries; admins can delete any.
+    can delete their own feed entries; admins can delete any. Both
+    actions live behind a ⋯ (ellipsis-vertical) menu on each feed
+    row, not a bare trash icon — keeps the default state clean.
     Pinned blob: any roommate can edit; last-edit-wins.
-  - **Notifications**: new feed entries fire a Telegram DM to each
-    other roommate who has opted in. Routes through the planned
-    **Admin notifications** channel below — this feature depends
-    on that infra landing first (or shipping together).
-  - **Surface placement** in the dashboard: defer to the design AI.
-    Backend doesn't block on UI choice.
+  - **Notifications**: new feed entries optionally fire a Telegram
+    DM to each other roommate, **per-source-roommate granularity**
+    (each recipient picks which specific roommates' posts they want
+    pinged on). Pinned-note edits do NOT fire DMs — the pinned
+    blob is high-edit-rate scratchpad and pinging on every tweak
+    would be noisy. If someone makes a meaningful pinned change,
+    convention is to drop a feed entry saying "updated the pin."
+  - **Notification opt-ins live on the Notes page itself**
+    (in-context), not on a global Notifications Settings screen.
+    The underlying `notification_pref` table is still shared with
+    the broader Admin-Notifications work, but this is one of the
+    panels the user touches the toggles through. Schema keys on
+    `(recipient_user_id, room_id, kind='room_note', source_roommate_id)`
+    so a row exists per (me, room, other-roommate) pair.
+  - **New-roommate default**: when a new roommate joins, they
+    appear in everyone else's notification list with the toggle
+    defaulted **OFF**. Opt-in design avoids surprising existing
+    roommates with pings from a stranger; the toggle row is
+    visible enough that people will flip it on if they want it.
+  - **Ship scope**: Notes storage + UI ships **first**; the
+    notification toggles render and persist `notification_pref`
+    rows, but the DM pipe doesn't fire until the broader
+    Admin-Notifications cron lands. Decouples a straightforward
+    CRUD feature from Telegram bot plumbing.
+  - **Surface placement** in the dashboard: dedicated `Notes` nav
+    tab in the sidebar, matching the mock.
 - **Room template.** Per-admin reusable bundle. Unlimited
   templates per admin; private only (no cross-admin sharing in
   v1).
