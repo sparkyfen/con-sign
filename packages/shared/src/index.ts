@@ -1,6 +1,5 @@
 export * from './schemas/audit.js';
 export * from './schemas/notes.js';
-export * from './schemas/notifications.js';
 export * from './schemas/auth.js';
 export * from './schemas/con.js';
 export * from './schemas/party.js';
